@@ -43,6 +43,16 @@ def get_device(mapping: Dict[str, Any], device_id: str) -> Dict[str, Any]:
     return device
 
 
+def get_tb_settings(mapping: Dict[str, Any]) -> Dict[str, str]:
+    tb = mapping.get("backend", {}).get("thingsboard", {}) if isinstance(mapping, dict) else {}
+    return {
+        "baseUrl": str(tb.get("baseUrl") or "").rstrip("/"),
+        "apiKey": str(tb.get("apiKey") or ""),
+        "username": str(tb.get("username") or ""),
+        "password": str(tb.get("password") or ""),
+    }
+
+
 def parse_jwt_exp(token: str) -> int:
     try:
         payload = token.split(".")[1]
@@ -59,11 +69,16 @@ class ThingsBoardClient:
         self._token: Optional[str] = None
         self._token_exp: int = 0
 
-    async def _get_auth_header(self) -> Dict[str, str]:
-        if TB_API_KEY:
-            return {"X-Authorization": f"ApiKey {TB_API_KEY}"}
+    async def _get_auth_header(self, mapping: Dict[str, Any]) -> Dict[str, str]:
+        settings = get_tb_settings(mapping)
+        api_key = TB_API_KEY or settings.get("apiKey")
+        username = TB_USERNAME or settings.get("username")
+        password = TB_PASSWORD or settings.get("password")
 
-        if not TB_USERNAME or not TB_PASSWORD:
+        if api_key:
+            return {"X-Authorization": f"ApiKey {api_key}"}
+
+        if not username or not password:
             raise HTTPException(
                 status_code=500,
                 detail="Missing ThingsBoard credentials. Set TB_API_KEY or TB_USERNAME/TB_PASSWORD.",
@@ -73,10 +88,14 @@ class ThingsBoardClient:
         if self._token and self._token_exp - now > 60:
             return {"X-Authorization": f"Bearer {self._token}"}
 
-        login_url = f"{TB_BASE_URL}/api/auth/login"
+        base_url = TB_BASE_URL or settings.get("baseUrl")
+        if not base_url:
+            raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
+
+        login_url = f"{base_url}/api/auth/login"
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
-                login_url, json={"username": TB_USERNAME, "password": TB_PASSWORD}
+                login_url, json={"username": username, "password": password}
             )
         if response.status_code != 200:
             raise HTTPException(status_code=502, detail="ThingsBoard login failed.")
@@ -94,31 +113,32 @@ class ThingsBoardClient:
         key: str,
         limit: int,
         hours: int,
+        mapping: Dict[str, Any],
+        entity_type: str = "DEVICE",
     ) -> List[Dict[str, Any]]:
-        if not TB_BASE_URL:
+        settings = get_tb_settings(mapping)
+        base_url = TB_BASE_URL or settings.get("baseUrl")
+        if not base_url:
             raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
 
         end_ts = int(time.time() * 1000)
         start_ts = end_ts - (hours * 60 * 60 * 1000)
-        interval_ms = max(1, int((end_ts - start_ts) / max(limit, 1)))
-
         params = {
             "keys": key,
             "startTs": start_ts,
             "endTs": end_ts,
-            "interval": interval_ms,
             "limit": limit,
-            "agg": "AVG",
+            "agg": "NONE",
         }
 
-        url = f"{TB_BASE_URL}/api/plugins/telemetry/DEVICE/{device_id}/values/timeseries"
-        headers = await self._get_auth_header()
+        url = f"{base_url}/api/plugins/telemetry/{entity_type}/{device_id}/values/timeseries"
+        headers = await self._get_auth_header(mapping)
 
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(url, params=params, headers=headers)
-            if response.status_code == 401 and not TB_API_KEY:
+            if response.status_code == 401 and not (TB_API_KEY or settings.get("apiKey")):
                 self._token = None
-                headers = await self._get_auth_header()
+                headers = await self._get_auth_header(mapping)
                 response = await client.get(url, params=params, headers=headers)
 
         if response.status_code != 200:
@@ -183,11 +203,19 @@ async def device_telemetry(
         device_tb_id = connector.get("deviceId")
         if not device_tb_id:
             raise HTTPException(status_code=400, detail="Missing ThingsBoard deviceId in mapping.")
+        entity_type = (connector.get("entityType") or "DEVICE").upper()
+        if entity_type not in {"DEVICE", "ASSET"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid entityType in mapping. Use DEVICE or ASSET.",
+            )
         points = await tb_client.fetch_timeseries(
             device_id=device_tb_id,
             key=telemetry_key,
             limit=limit,
             hours=hours,
+            mapping=mapping,
+            entity_type=entity_type,
         )
         return {"deviceId": device_id, "key": telemetry_key, "points": points}
 

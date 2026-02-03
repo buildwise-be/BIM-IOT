@@ -1,6 +1,10 @@
 {
   "backend": {
-    "baseUrl": "http://localhost:8080"
+    "middlewareUrl": "http://localhost:8000",
+    "thingsboard": {
+      "baseUrl": "http://thingsboard:8080",
+      "apiKey": "tb_vROrU2YxaVI6YkbE28RA6ENnATjfcTItVTkjSONHPiGoTIxJkrjHQgySrDVr5MwrOXXu6Fd1sl9TTSLzb6B7NA"
+    }
   },
   "devices": {
     "DEV_1": {
@@ -8,6 +12,8 @@
       "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28", "3TazwRY9P9VBCwM4_ANS28"],
       "connector": {
         "type": "thingsboard",
+        "deviceId": "f34a1140-0113-11f1-873e-85f6dc6f3a3d",
+        "entityType": "DEVICE",
         "accessToken": "l28lz5yziuq49stndv33",
         "telemetryKey": "temperature"
       }
@@ -17,6 +23,8 @@
       "ifcGuids": ["25H37vVhla0odoVV0iLOox"],
       "connector": {
         "type": "thingsboard",
+        "deviceId": "0129b400-0114-11f1-873e-85f6dc6f3a3d",
+        "entityType": "DEVICE",
         "accessToken": "Tabrgu6IwTnGZEVRyzVY",
         "telemetryKey": "humidity"
       }

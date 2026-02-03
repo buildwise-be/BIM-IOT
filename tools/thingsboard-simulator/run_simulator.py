@@ -57,9 +57,12 @@ def main() -> int:
 
     config_path = Path(args.config)
     config = load_config(config_path)
-    base_url = args.base_url or config.get("backend", {}).get("baseUrl")
+    base_url = (
+        args.base_url
+        or config.get("backend", {}).get("thingsboard", {}).get("baseUrl")
+    )
     if not base_url:
-        raise SystemExit("Missing backend.baseUrl or --base-url")
+        raise SystemExit("Missing backend.thingsboard.baseUrl or --base-url")
 
     devices = config.get("devices", {})
     if not devices:

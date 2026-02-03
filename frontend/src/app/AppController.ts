@@ -83,8 +83,8 @@ export class AppController {
 
     // Load devices data
     this.ifcIoTLinker = new IfcIoTLinker(devicesData, guidMap);
-    if ((devicesData as any).backend?.baseUrl) {
-      this.apiBaseUrl = (devicesData as any).backend.baseUrl;
+    if ((devicesData as any).backend?.middlewareUrl) {
+      this.apiBaseUrl = (devicesData as any).backend.middlewareUrl;
     }
 
     this.initDeviceMenu();
