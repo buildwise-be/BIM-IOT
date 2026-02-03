@@ -87,8 +87,9 @@ export class AppController {
   }
 
   private initDeviceMenu(): void {
+    const viewerContainer = document.getElementById("viewer") || document.body;
     this.deviceMenu = new DeviceMenu(
-      document.body,
+      viewerContainer,
       this.ifcIoTLinker.getDevices(),
       (device) => this.onDeviceSelected(device)
     );
