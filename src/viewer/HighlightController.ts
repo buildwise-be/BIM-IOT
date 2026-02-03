@@ -154,9 +154,7 @@ export class HighlightController {
     }
       */
     
-    await this.loader.fragments.setOpacity(0.1,
-            modelIdMap,
-    );
+    //await this.loader.fragments.setOpacity(0.1, modelIdMap,  );
     const color = new THREE.Color("red");
 
     await this.loader.fragments.highlight(
