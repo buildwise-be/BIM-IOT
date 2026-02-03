@@ -269,10 +269,9 @@ export class AppController {
 
     // Create canvas for chart
     const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 140;
+    canvas.height = 200;
     canvas.style.width = "100%";
-    canvas.style.height = "140px";
+    canvas.style.height = "100%";
     iotDataDiv.appendChild(canvas);
 
     // Generate historical data (last 24 hours, hourly)
@@ -304,15 +303,31 @@ export class AppController {
           data: data,
           borderColor: 'rgb(75, 192, 192)',
           backgroundColor: 'rgba(75, 192, 192, 0.2)',
-          tension: 0.1
+          tension: 0.5
         }]
       },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false }
+        },
         scales: {
+          x: {
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 6
+            },
+            grid: {
+              display: false
+            }
+          },
           y: {
-            beginAtZero: false
+            beginAtZero: false,
+            ticks: {
+              maxTicksLimit: 4
+            }
           }
         }
       }
