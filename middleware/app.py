@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import httpx
+import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -200,3 +201,7 @@ async def device_telemetry(
         return {"deviceId": device_id, "key": telemetry_key, "points": points}
 
     raise HTTPException(status_code=400, detail=f"Unsupported connector type: {connector_type}")
+
+
+if __name__ == "__main__":
+    uvicorn.run("middleware.app:app", host="0.0.0.0", port=8000, reload=False)

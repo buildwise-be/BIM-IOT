@@ -1,0 +1,41 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8081:80"
+    depends_on:
+      - middleware
+
+  middleware:
+    build:
+      context: .
+      dockerfile: middleware/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      TB_BASE_URL: "http://thingsboard:8080"
+      # TB_API_KEY: "REPLACE_WITH_API_KEY"
+      # TB_USERNAME: "tenant@thingsboard.org"
+      # TB_PASSWORD: "tenant"
+      CORS_ORIGINS: "http://localhost:8081"
+      DEVICE_MAPPING_PATH: "/app/mapping/devices.ifc.json"
+    depends_on:
+      - thingsboard
+
+  thingsboard:
+    image: thingsboard/tb-postgres:latest
+    ports:
+      - "8080:8080"
+      - "1883:1883"
+      - "5683:5683/udp"
+    environment:
+      TB_QUEUE_TYPE: "in-memory"
+    volumes:
+      - tb_data:/data
+      - tb_logs:/var/log/thingsboard
+
+volumes:
+  tb_data:
+  tb_logs:

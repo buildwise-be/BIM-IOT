@@ -298,7 +298,7 @@ export class AppController {
 
     // Create canvas for chart
     const canvas = document.createElement("canvas");
-    canvas.height = 90;
+    canvas.height = 400;
     canvas.style.width = "100%";
     canvas.style.height = "90px";
     iotDataDiv.appendChild(canvas);
@@ -330,7 +330,7 @@ export class AppController {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
+        maintainAspectRatio: true,
         plugins: {
           legend: { display: false }
         },
