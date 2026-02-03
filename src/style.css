@@ -4,16 +4,27 @@ body {
   flex-direction: column;
   height: 100vh;
   font-family: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
 }
 
 #top-container {
-  height: calc(100vh - 30vh);
   display: flex;
   position: relative;
-  resize: vertical;
-  overflow: auto;
-  min-height: 300px;
-  max-height: 90vh;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+#splitter {
+  height: 8px;
+  background: linear-gradient(90deg, rgba(35, 43, 57, 0.1), rgba(35, 43, 57, 0.5), rgba(35, 43, 57, 0.1));
+  cursor: row-resize;
+  border-top: 1px solid rgba(35, 43, 57, 0.2);
+  border-bottom: 1px solid rgba(35, 43, 57, 0.2);
+  flex: 0 0 auto;
+}
+
+#splitter.dragging {
+  background: linear-gradient(90deg, rgba(35, 43, 57, 0.2), rgba(35, 43, 57, 0.7), rgba(35, 43, 57, 0.2));
 }
 
 #viewer {
@@ -24,18 +35,16 @@ body {
 }
 
 #iot-data {
-  
+  flex: 0 0 auto;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 30vh;
   background: #f8f9fa;
   border-top: 1px solid #dee2e6;
   padding: 10px;
   overflow: auto;
-  resize: vertical;
-  min-height: 100px;
-  max-height: 50vh;
+  min-height: 140px;
+  max-height: 70vh;
 }
 
 .device {

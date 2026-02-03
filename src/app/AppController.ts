@@ -31,6 +31,8 @@ export class AppController {
     this.components = viewer.components;
     this.world = viewer.world;
 
+    this.initSplitLayout();
+
     // Handle container resize to maintain aspect ratio
     const resizeObserver = new ResizeObserver(() => {
       const rect = container.getBoundingClientRect();
@@ -84,6 +86,65 @@ export class AppController {
     this.initDeviceMenu();
     
     console.log("✅ App ready – IFC picking SAFE");
+  }
+
+  private initSplitLayout(): void {
+    const topContainer = document.getElementById("top-container");
+    const bottomContainer = document.getElementById("iot-data");
+    const splitter = document.getElementById("splitter");
+    if (!topContainer || !bottomContainer || !splitter) return;
+
+    const minTop = 240;
+    const minBottom = 140;
+
+    const setHeights = (topHeight: number) => {
+      const total = document.body.clientHeight;
+      const splitterHeight = splitter.getBoundingClientRect().height || 8;
+      const maxTop = total - splitterHeight - minBottom;
+      const clampedTop = Math.min(Math.max(minTop, topHeight), maxTop);
+      const bottomHeight = Math.max(minBottom, total - splitterHeight - clampedTop);
+
+      topContainer.style.height = `${clampedTop}px`;
+      bottomContainer.style.height = `${bottomHeight}px`;
+    };
+
+    const initialTop = topContainer.getBoundingClientRect().height || Math.floor(window.innerHeight * 0.7);
+    setHeights(initialTop);
+
+    let isDragging = false;
+    let activePointerId: number | null = null;
+
+    const onMove = (event: PointerEvent) => {
+      if (!isDragging) return;
+      const top = event.clientY;
+      setHeights(top);
+    };
+
+    const onUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      splitter.classList.remove("dragging");
+      if (activePointerId !== null) {
+        splitter.releasePointerCapture?.(activePointerId);
+      }
+      activePointerId = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+
+    splitter.addEventListener("pointerdown", (event) => {
+      isDragging = true;
+      activePointerId = event.pointerId;
+      splitter.classList.add("dragging");
+      splitter.setPointerCapture?.(event.pointerId);
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+
+    window.addEventListener("resize", () => {
+      const topHeight = topContainer.getBoundingClientRect().height;
+      setHeights(topHeight);
+    });
   }
 
   private initDeviceMenu(): void {
@@ -209,7 +270,9 @@ export class AppController {
     // Create canvas for chart
     const canvas = document.createElement("canvas");
     canvas.width = 400;
-    canvas.height = 200;
+    canvas.height = 140;
+    canvas.style.width = "100%";
+    canvas.style.height = "140px";
     iotDataDiv.appendChild(canvas);
 
     // Generate historical data (last 24 hours, hourly)
