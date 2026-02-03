@@ -24,18 +24,41 @@ services:
     depends_on:
       - thingsboard
 
+
+  postgres:
+    restart: always
+    image: "postgres:16"
+    ports:
+      - "5432"
+    environment:
+      POSTGRES_DB: thingsboard
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
   thingsboard:
-    image: thingsboard/tb-postgres:latest
+    restart: always
+    image: "thingsboard/tb-node:4.3.0"
     ports:
       - "8080:8080"
+      - "7070:7070"
       - "1883:1883"
-      - "5683:5683/udp"
+      - "8883:8883"
+      - "5683-5688:5683-5688/udp"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
     environment:
-      TB_QUEUE_TYPE: "in-memory"
-    volumes:
-      - tb_data:/data
-      - tb_logs:/var/log/thingsboard
+      TB_SERVICE_ID: tb-ce-node
+      # INSTALL_TB: "true" pour l'installation uniquement.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/thingsboard
+    depends_on:
+      - postgres
 
 volumes:
-  tb_data:
-  tb_logs:
+  postgres-data:
+    name: tb-postgres-data
+    driver: local
+
+

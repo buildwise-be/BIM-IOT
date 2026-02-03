@@ -1,14 +1,14 @@
 {
   "backend": {
-    "baseUrl": "http://localhost:8000"
+    "baseUrl": "http://localhost:8080"
   },
   "devices": {
     "DEV_1": {
       "type": "temperature",
       "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28", "3TazwRY9P9VBCwM4_ANS28"],
       "connector": {
-        "type": "mock",
-        "deviceId": "REPLACE_WITH_TB_DEVICE_ID",
+        "type": "thingsboard",
+        "accessToken": "l28lz5yziuq49stndv33",
         "telemetryKey": "temperature"
       }
     },
@@ -17,7 +17,7 @@
       "ifcGuids": ["25H37vVhla0odoVV0iLOox"],
       "connector": {
         "type": "thingsboard",
-        "deviceId": "REPLACE_WITH_TB_DEVICE_ID",
+        "accessToken": "Tabrgu6IwTnGZEVRyzVY",
         "telemetryKey": "humidity"
       }
     }

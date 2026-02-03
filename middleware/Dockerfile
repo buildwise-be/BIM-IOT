@@ -3,6 +3,8 @@ WORKDIR /app
 
 COPY middleware/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+# RUN apt-get update -y
+# RUN apt-get install -y iputils-ping
 
 COPY middleware/app.py /app/app.py
 COPY middleware/__init__.py /app/__init__.py
