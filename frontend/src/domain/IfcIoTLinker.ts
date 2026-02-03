@@ -2,17 +2,31 @@ export type IoTDevice = {
   id: string;
   type: string;
   ifcGuids: string[];
+  connector?: {
+    type: string;
+    deviceId?: string;
+    telemetryKey?: string;
+  };
 };
 
 export class IfcIoTLinker {
   private devices: IoTDevice[] = [];
   private guidToExpressId: Map<string, number> = new Map();
 
-  constructor(mapping: { devices: Record<string, { type: string; ifcGuids: string[] }> }, guidMap: Map<string, number>) {
+  constructor(
+    mapping: {
+      devices: Record<
+        string,
+        { type: string; ifcGuids: string[]; connector?: { type: string; deviceId?: string; telemetryKey?: string } }
+      >;
+    },
+    guidMap: Map<string, number>
+  ) {
     this.devices = Object.entries(mapping.devices).map(([id, data]) => ({
       id,
       type: data.type,
       ifcGuids: data.ifcGuids,
+      connector: data.connector,
     }));
     this.guidToExpressId = guidMap;
   }

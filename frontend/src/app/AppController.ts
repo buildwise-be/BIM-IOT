@@ -18,6 +18,7 @@ export class AppController {
   private modelID: number;
   private deviceMenu: DeviceMenu;
   private selectionToken = 0;
+  private apiBaseUrl = "http://localhost:8000";
 
   private isSelectionActive(token: number): boolean {
     return token === this.selectionToken;
@@ -82,6 +83,9 @@ export class AppController {
 
     // Load devices data
     this.ifcIoTLinker = new IfcIoTLinker(devicesData, guidMap);
+    if ((devicesData as any).backend?.baseUrl) {
+      this.apiBaseUrl = (devicesData as any).backend.baseUrl;
+    }
 
     this.initDeviceMenu();
     
@@ -199,7 +203,7 @@ export class AppController {
 
       // Display IoT data
       if (!this.isSelectionActive(token)) return;
-      this.displayIoTData(device);
+      await this.displayIoTData(device);
     }
   }
 
@@ -247,68 +251,86 @@ export class AppController {
     controls.setLookAt(newPos.x, newPos.y, newPos.z, center.x, center.y, center.z, true);
   }
 
-  private displayIoTData(device: any): void {
+  private async displayIoTData(device: any): Promise<void> {
     const iotDataDiv = document.getElementById("iot-data");
     if (!iotDataDiv) return;
 
     // Clear previous content
     iotDataDiv.innerHTML = `<h4>IoT Data for ${device.id}</h4>`;
 
-    // Show last telemetry
-    let lastValue;
-    if (device.type === "temperature") {
-      lastValue = `${Math.round(Math.random() * 10 + 20)}°C`;
-    } else if (device.type === "humidity") {
-      lastValue = `${Math.round(Math.random() * 20 + 40)}%`;
-    } else {
-      lastValue = `${Math.random().toFixed(2)}`;
+    const loading = document.createElement("p");
+    loading.textContent = "Loading telemetry...";
+    iotDataDiv.appendChild(loading);
+
+    const telemetryKey = device.connector?.telemetryKey || device.type;
+    const telemetryUrl = `${this.apiBaseUrl}/devices/${encodeURIComponent(device.id)}/telemetry?key=${encodeURIComponent(
+      telemetryKey
+    )}&limit=24`;
+
+    let points: Array<{ ts: number; value: number }> = [];
+    try {
+      const response = await fetch(telemetryUrl);
+      if (!response.ok) {
+        throw new Error(`Telemetry fetch failed: ${response.status}`);
+      }
+      const payload = await response.json();
+      points = Array.isArray(payload.points) ? payload.points : [];
+    } catch (error) {
+      loading.textContent = "No telemetry data available.";
+      return;
     }
+
+    loading.remove();
+
+    if (points.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "No telemetry data available.";
+      iotDataDiv.appendChild(empty);
+      return;
+    }
+
+    const latestPoint = points[points.length - 1];
     const lastTelemetry = document.createElement("p");
-    lastTelemetry.textContent = `Last value: ${lastValue} - Updated: ${new Date().toLocaleTimeString()}`;
+    lastTelemetry.textContent = `Last value: ${latestPoint.value} - Updated: ${new Date(
+      latestPoint.ts
+    ).toLocaleTimeString()}`;
     iotDataDiv.appendChild(lastTelemetry);
 
     // Create canvas for chart
     const canvas = document.createElement("canvas");
-    canvas.height = 200;
+    canvas.height = 90;
     canvas.style.width = "100%";
-    canvas.style.height = "100%";
+    canvas.style.height = "90px";
     iotDataDiv.appendChild(canvas);
 
-    // Generate historical data (last 24 hours, hourly)
-    const labels = [];
-    const data = [];
-    const now = new Date();
-    for (let i = 23; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * 60 * 60 * 1000);
-      labels.push(time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-
-      let value;
-      if (device.type === "temperature") {
-        value = Math.round((20 + Math.random() * 10 + Math.sin(i / 4) * 5) * 10) / 10; // 20-30°C with variation
-      } else if (device.type === "humidity") {
-        value = Math.round((40 + Math.random() * 20 + Math.cos(i / 6) * 10) * 10) / 10; // 40-60% with variation
-      } else {
-        value = Math.round((Math.random() * 100) * 10) / 10;
-      }
-      data.push(value);
-    }
+    const labels = points.map((point) =>
+      new Date(point.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+    const data = points.map((point) => point.value);
 
     // Create chart
     new Chart(canvas, {
-      type: 'line',
+      type: "line",
       data: {
         labels: labels,
-        datasets: [{
-          label: device.type === "temperature" ? 'Temperature (°C)' : device.type === "humidity" ? 'Humidity (%)' : 'Value',
-          data: data,
-          borderColor: 'rgb(75, 192, 192)',
-          backgroundColor: 'rgba(75, 192, 192, 0.2)',
-          tension: 0.5
-        }]
+        datasets: [
+          {
+            label:
+              device.type === "temperature"
+                ? "Temperature (°C)"
+                : device.type === "humidity"
+                ? "Humidity (%)"
+                : "Value",
+            data: data,
+            borderColor: "rgb(75, 192, 192)",
+            backgroundColor: "rgba(75, 192, 192, 0.2)",
+            tension: 0.5
+          }
+        ]
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
         plugins: {
           legend: { display: false }
         },

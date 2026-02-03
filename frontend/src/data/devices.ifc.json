@@ -1,0 +1,25 @@
+{
+  "backend": {
+    "baseUrl": "http://localhost:8000"
+  },
+  "devices": {
+    "DEV_1": {
+      "type": "temperature",
+      "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28", "3TazwRY9P9VBCwM4_ANS28"],
+      "connector": {
+        "type": "thingsboard",
+        "deviceId": "REPLACE_WITH_TB_DEVICE_ID",
+        "telemetryKey": "temperature"
+      }
+    },
+    "DEV_2": {
+      "type": "humidity",
+      "ifcGuids": ["25H37vVhla0odoVV0iLOox"],
+      "connector": {
+        "type": "thingsboard",
+        "deviceId": "REPLACE_WITH_TB_DEVICE_ID",
+        "telemetryKey": "humidity"
+      }
+    }
+  }
+}
