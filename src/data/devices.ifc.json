@@ -1,0 +1,12 @@
+{
+  "devices": {
+    "DEV_1": {
+      "type": "temperature",
+      "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28", "3TazwRY9P9VBCwM4_ANS28"]
+    },
+    "DEV_2": {
+      "type": "humidity",
+      "ifcGuids": ["25H37vVhla0odoVV0iLOox"]
+    }
+  }
+}
