@@ -23,34 +23,42 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
 
 ## Architecture Graph
 ```text
-                +----------------------+
-                |   IFC Model (.ifc)   |
-                |  (volume mounted)    |
-                +----------+-----------+
-                           |
-                           v
-+------------------+   +---+---------------------+
-|  Thingsboard     |<--| Frontend (Vite + TS)    |
-|  (Telemetry DB)  |   |  Viewer + UI + Charts   |
-+--------+---------+   +---+---------------------+
-         ^                 |
-         |                 v
-         |           +-----+----------------+
-         |           | Middleware (FastAPI) |
-         |           | /devices, /telemetry |
-         |           | /devices.ifc.json    |
-         |           | /model/{file}        |
-         |           +----------+-----------+
-         |                      |
-         |                      v
-         |           +----------+-----------+
-         |           | devices.ifc.json     |
-         |           | + model selection    |
-         |           +----------------------+
-         |
-         +---- Simulator (local Python) ----+
+                          +----------------------+
+                          |   IFC Model (.ifc)   |
+                          |  devices.ifc.json    |
+                          |  (data volume)       |
+                          +----------+-----------+
+                                     |
+                                     v
+                     +---------------+---------------+
+                     |       Middleware (FastAPI)    |
+                     | /devices /telemetry /model    |
+                     | /devices.ifc.json             |
+                     +-------+---------------+-------+
+                             |               |
+                             v               v
+               +-------------+---+     +-----+-------------------+
+               | Frontend        |     | Dash (Dashboard)        |
+               | (Vite + TS)     |     | Dash + Plotly + Bootstrap|
+               | Viewer + UI     |     | Embeds Viewer (iframe)  |
+               +-----------------+     +------------------------+
+                             |
+                             v
+                     +-------+---------+
+                     |  Thingsboard    |
+                     |  (Telemetry)    |
+                     +-------+---------+
+                             |
+                             v
+                     +-------+---------+
+                     |  Postgres DB    |
+                     +-----------------+
+                             ^
+                             |
+               +-------------+-------------+
+               | Simulator (local Python) |
+               +--------------------------+
 ```
-
 ## Getting Started
 ### 1. Start the Docker stack
 ```bash
