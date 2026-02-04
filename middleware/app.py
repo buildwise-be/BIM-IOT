@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-DEVICE_MAPPING_PATH = os.getenv("DEVICE_MAPPING_PATH", "mapping/devices.ifc.json")
+DEVICE_MAPPING_PATH = os.getenv("DEVICE_MAPPING_PATH", "data/devices.ifc.json")
 MAPPING_DIR = Path(os.getenv("MAPPING_DIR") or os.path.dirname(DEVICE_MAPPING_PATH)).resolve()
 TB_BASE_URL = os.getenv("TB_BASE_URL", "").rstrip("/")
 TB_API_KEY = os.getenv("TB_API_KEY")

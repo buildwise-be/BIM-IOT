@@ -61,9 +61,9 @@ Exposed services:
 If the middleware runs on a different host/port, set `VITE_MIDDLEWARE_URL` when building the frontend.
 
 ### 2. Configure the mapping and model
-Place the mapping + IFC model in `mapping/` (mounted into the middleware as `/app/mapping`):
-- `mapping/devices.ifc.json`
-- `mapping/<your-model>.ifc`
+Place the mapping + IFC model in `data/` (mounted into the middleware as `/app/data`):
+- `data/devices.ifc.json`
+- `data/<your-model>.ifc`
 
 The middleware serves:
 - `http://localhost:8000/devices.ifc.json`
@@ -71,7 +71,7 @@ The middleware serves:
 
 #### Structure of `devices.ifc.json`
 Top-level fields:
-- `model.file`: IFC filename to load (must exist in `mapping/`).
+- `model.file`: IFC filename to load (must exist in `data/`).
 - `backend.middlewareUrl`: Middleware base URL used by the frontend.
 - `backend.thingsboard`: `baseUrl` + credentials (`apiKey` or `username`/`password`).
 - `devices`: Map of device id -> metadata.

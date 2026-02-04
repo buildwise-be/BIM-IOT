@@ -19,10 +19,10 @@ services:
     environment:
       TB_BASE_URL: "http://thingsboard:8080"
       CORS_ORIGINS: "http://localhost:8081"
-      DEVICE_MAPPING_PATH: "/app/mapping/devices.ifc.json"
-      MAPPING_DIR: "/app/mapping"
+      DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
+      MAPPING_DIR: "/app/data"
     volumes:
-      - ./mapping:/app/mapping
+      - ./data:/app/data
     depends_on:
       - thingsboard
 
@@ -62,4 +62,3 @@ volumes:
   postgres-data:
     name: tb-postgres-data
     driver: local
-
