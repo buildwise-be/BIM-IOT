@@ -9,9 +9,10 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
   - Loads an IFC and builds a GUID -> expressID mapping.
   - Loads device mapping from the middleware (`/devices.ifc.json`).
   - Displays telemetry with a chart (Chart.js).
-- Dashboard (Dash + Plotly, service dÃ©diÃ©)
+- Dashboard (Dash + Plotly + Bootstrap, service dédié)
   - Refreshes the device mapping on demand.
   - Displays telemetry charts and embeds the Vite 3D viewer.
+  - Uses Dash Bootstrap Components for layout and styling.
 - Middleware (FastAPI)
   - Exposes a simple API for the front: `/devices` and `/devices/{id}/telemetry`.
   - Queries Thingsboard via REST (JWT or ApiKey).
@@ -129,3 +130,5 @@ python tools/thingsboard-simulator/run_simulator.py --base-url http://localhost:
 - If the front does not load telemetry: verify `deviceId` is a valid Thingsboard UUID.
 - If only one point appears: middleware must use `agg=NONE` (already applied).
 - If Thingsboard is not accessible: check `docker compose ps` and `http://localhost:7000`.
+- If you get 422 Unprocessable Entity on telemetry: ensure limit is within 1-1000.
+
