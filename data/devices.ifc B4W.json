@@ -1,6 +1,6 @@
 {
   "model": {
-    "file": "model.ifc"
+    "file": "modelB4W.ifc"
   },
   "backend": {
     "middlewareUrl": "http://localhost:8000",
@@ -12,7 +12,7 @@
   "devices": {
     "DEV_1": {
       "type": "temperature",
-      "ifcGuids": ["08LEoq5O$zN8JqaHBDa0Sp", "25H37vVhla0odoVV0iLOox"],
+      "ifcGuids": ["3VKCH25GrF$RO4tHl7y4__", "3jqBOilKL8$uvNq5pJRWN7"],
       "connector": {
         "type": "thingsboard",
         "deviceId": "f34a1140-0113-11f1-873e-85f6dc6f3a3d",
@@ -23,7 +23,7 @@
     },
     "DEV_2": {
       "type": "humidity",
-      "ifcGuids": ["3Upuh6lGP049afrfdxHO3A", "0Rfsk5dHz8MubjzJPHpW3I","3bRpGpDXHFUh9nY_ApfbfZ", "3K$ESGWDb0vR6QQHwufwVi", ""],
+      "ifcGuids": ["0YFYIiyWn8qwpmZe1fFIt2", "2vroSGn5DF2Bty3LVNwGBP","3lvwIq7Tn7mfYc8c_dsXcv", "", ""],
       "connector": {
         "type": "thingsboard",
         "deviceId": "0129b400-0114-11f1-873e-85f6dc6f3a3d",

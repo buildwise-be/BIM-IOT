@@ -143,26 +143,34 @@ class ThingsBoardClient:
     async def fetch_timeseries(
         self,
         device_id: str,
-        key: str,
+        keys: str,
         limit: int,
         hours: int,
         mapping: Dict[str, Any],
         entity_type: str = "DEVICE",
-    ) -> List[Dict[str, Any]]:
+        agg: str = "NONE",
+        start_ts: Optional[int] = None,
+        end_ts: Optional[int] = None,
+        interval: Optional[int] = None,
+    ) -> Dict[str, List[Dict[str, Any]]]:
         settings = get_tb_settings(mapping)
         base_url = TB_BASE_URL or settings.get("baseUrl")
         if not base_url:
             raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
 
-        end_ts = int(time.time() * 1000)
-        start_ts = end_ts - (hours * 60 * 60 * 1000)
+        if end_ts is None:
+            end_ts = int(time.time() * 1000)
+        if start_ts is None:
+            start_ts = end_ts - (hours * 60 * 60 * 1000)
         params = {
-            "keys": key,
+            "keys": keys,
             "startTs": start_ts,
             "endTs": end_ts,
             "limit": limit,
-            "agg": "NONE",
+            "agg": agg or "NONE",
         }
+        if interval:
+            params["interval"] = interval
 
         url = f"{base_url}/api/plugins/telemetry/{entity_type}/{device_id}/values/timeseries"
         headers = await self._get_auth_header(mapping)
@@ -178,18 +186,20 @@ class ThingsBoardClient:
             raise HTTPException(status_code=502, detail="ThingsBoard telemetry fetch failed.")
 
         payload = response.json()
-        raw_points = payload.get(key, [])
-        points = []
-        for item in raw_points:
-            ts = item.get("ts")
-            value = item.get("value")
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                pass
-            points.append({"ts": ts, "value": value})
-        points.sort(key=lambda item: item["ts"])
-        return points
+        series: Dict[str, List[Dict[str, Any]]] = {}
+        for key, raw_points in payload.items():
+            points = []
+            for item in raw_points:
+                ts = item.get("ts")
+                value = item.get("value")
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    pass
+                points.append({"ts": ts, "value": value})
+            points.sort(key=lambda item: item["ts"])
+            series[key] = points
+        return series
 
 
 tb_client = ThingsBoardClient()
@@ -201,6 +211,10 @@ async def build_telemetry(
     key: Optional[str],
     limit: int,
     hours: int,
+    agg: Optional[str] = None,
+    start_ts: Optional[int] = None,
+    end_ts: Optional[int] = None,
+    interval: Optional[int] = None,
 ) -> Dict[str, Any]:
     device = get_device(mapping, device_id)
 
@@ -221,24 +235,41 @@ async def build_telemetry(
                 status_code=400,
                 detail="Invalid entityType in mapping. Use DEVICE or ASSET.",
             )
-        points = await tb_client.fetch_timeseries(
+        
+        series = await tb_client.fetch_timeseries(
             device_id=device_tb_id,
-            key=telemetry_key,
+            keys=telemetry_key,
             limit=limit,
             hours=hours,
             mapping=mapping,
             entity_type=entity_type,
+            agg=(agg or "NONE"),
+            start_ts=start_ts,
+            end_ts=end_ts,
+            interval=interval,
         )
-        return {"deviceId": device_id, "key": telemetry_key, "points": points}
+        if "," in telemetry_key:
+            return {"deviceId": device_id, "series": series}
+        only_key = telemetry_key.split(",")[0].strip()
+        points = series.get(only_key, [])
+        return {"deviceId": device_id, "key": only_key, "points": points}
 
     if connector_type == "mock":
         now = int(time.time() * 1000)
-        points = []
-        for i in range(limit):
-            ts = now - (limit - 1 - i) * 60 * 60 * 1000
-            value = i
-            points.append({"ts": ts, "value": value})
-        return {"deviceId": device_id, "key": telemetry_key, "points": points}
+        keys = [k.strip() for k in telemetry_key.split(",") if k.strip()]
+        if not keys:
+            keys = ["value"]
+        series: Dict[str, List[Dict[str, Any]]] = {}
+        for key_name in keys:
+            points = []
+            for i in range(limit):
+                ts = now - (limit - 1 - i) * 60 * 60 * 1000
+                value = i
+                points.append({"ts": ts, "value": value})
+            series[key_name] = points
+        if len(keys) > 1:
+            return {"deviceId": device_id, "series": series}
+        return {"deviceId": device_id, "key": keys[0], "points": series[keys[0]]}
 
     raise HTTPException(status_code=400, detail=f"Unsupported connector type: {connector_type}")
 
@@ -287,12 +318,16 @@ def get_model(filename: str) -> FileResponse:
 @app.get("/devices/{device_id}/telemetry")
 async def device_telemetry(
     device_id: str,
-    key: Optional[str] = Query(default=None),
-    limit: int = Query(default=24, ge=1, le=200),
+    key: Optional[str] = Query(default=None, description="Single key or comma-separated keys"),
+    limit: int = Query(default=24, ge=1, le=1000),
     hours: int = Query(default=24, ge=1, le=168),
+    agg: Optional[str] = Query(default=None),
+    start_ts: Optional[int] = Query(default=None, alias="startTs"),
+    end_ts: Optional[int] = Query(default=None, alias="endTs"),
+    interval: Optional[int] = Query(default=None, description="Aggregation interval in ms"),
 ) -> Dict[str, Any]:
     mapping = load_mapping_cached()
-    return await build_telemetry(mapping, device_id, key, limit, hours)
+    return await build_telemetry(mapping, device_id, key, limit, hours, agg, start_ts, end_ts, interval)
 
 
 if __name__ == "__main__":

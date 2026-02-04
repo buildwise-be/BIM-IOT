@@ -200,7 +200,7 @@ export class AppController {
     this.deviceMenu = new DeviceMenu(
       viewerContainer,
       this.ifcIoTLinker.getDevices(),
-      (device) => this.onDeviceSelected(device),
+      (device) => this.selectDeviceById(device.id),
       () => this.refreshMapping()
     );
   }
@@ -228,6 +228,12 @@ export class AppController {
         const deviceId = String(payload.deviceId || "");
         if (deviceId) {
           this.selectDeviceById(deviceId);
+        }
+      }
+      if (payload.type === "selectDevices") {
+        const deviceIds = Array.isArray(payload.deviceIds) ? payload.deviceIds : [];
+        if (deviceIds.length) {
+          this.selectDevicesByIds(deviceIds.map((id) => String(id)));
         }
       }
       if (payload.type === "resetSelection") {
@@ -279,10 +285,49 @@ export class AppController {
     }
   }
 
+  private postViewerLog(payload: { expressID: number; guid?: string; ifcType?: string; name?: string; modelId?: number }) {
+    if (!this.isEmbedded) return;
+    try {
+      window.parent?.postMessage(
+        { type: "viewerLog", payload },
+        "*"
+      );
+    } catch {
+      // no-op
+    }
+  }
+
   private async selectDeviceById(deviceId: string): Promise<void> {
     const device = this.ifcIoTLinker.getDeviceById(deviceId);
     if (!device) return;
-    await this.onDeviceSelected(device);
+    await this.selectDevicesByIds([deviceId]);
+  }
+
+  private async selectDevicesByIds(deviceIds: string[]): Promise<void> {
+    const devices = deviceIds
+      .map((id) => this.ifcIoTLinker.getDeviceById(id))
+      .filter((device): device is any => Boolean(device));
+    if (!devices.length) return;
+
+    const token = ++this.selectionToken;
+    const expressIDs: number[] = [];
+    for (const device of devices) {
+      const ids = await this.resolveExpressIds(device);
+      expressIDs.push(...ids);
+    }
+
+    if (!this.isSelectionActive(token)) return;
+
+    if (expressIDs.length > 0) {
+      await this.highlightController.runExclusive(async () => {
+        if (!this.isSelectionActive(token)) return;
+        await this.highlightController.highlightByExpressIDs(this.modelID, expressIDs);
+      });
+      if (!this.isSelectionActive(token)) return;
+      await this.focusOnExpressIDs(expressIDs);
+      if (!this.isSelectionActive(token)) return;
+      await this.updateDetailsForDevices(devices);
+    }
   }
 
   private async focusDeviceById(deviceId: string): Promise<void> {
@@ -327,10 +372,16 @@ export class AppController {
 
   private async handlePick(payload: { expressID: number; guid?: string; ifcType?: string; name?: string }): Promise<boolean> {
     const guid = payload.guid;
+    this.postViewerLog({
+      expressID: payload.expressID,
+      guid: payload.guid,
+      ifcType: payload.ifcType,
+      name: payload.name,
+    });
     if (!guid) return false;
     const device = this.ifcIoTLinker.getDeviceByGuid(guid);
     if (!device) return false;
-    await this.onDeviceSelected(device);
+    await this.selectDevicesByIds([device.id]);
     return true;
   }
 
@@ -385,43 +436,23 @@ export class AppController {
     }
   }
 
-  private async onDeviceSelected(device: any): Promise<void> {
-    console.log("onDeviceSelected", device);
-
-    const token = ++this.selectionToken;
-    const expressIDs = await this.resolveExpressIds(device);
-
-    if (!this.isSelectionActive(token)) return;
-
-    if (expressIDs.length > 0) {
-      await this.highlightController.runExclusive(async () => {
-        if (!this.isSelectionActive(token)) return;
-        await this.highlightController.highlightByExpressIDs(this.modelID, expressIDs);
-      });
-      if (!this.isSelectionActive(token)) return;
-      await this.focusOnExpressIDs(expressIDs);
-
-      // Get details for display
-      const model = this.loader.fragments.list.get(this.modelID);
-      const itemsMap = await model.getItems();
-      const details: string[] = [];
-      for (const expressID of expressIDs) {
+  private async updateDetailsForDevices(devices: any[]): Promise<void> {
+    if (!devices.length) return;
+    const model = this.loader.fragments.list.get(this.modelID);
+    if (!model) return;
+    const itemsMap = await model.getItems();
+    const details: string[] = [];
+    for (const device of devices) {
+      const ids = await this.resolveExpressIds(device);
+      for (const expressID of ids) {
         const item = itemsMap.get(expressID);
         if (item) {
           details.push(`GUID: ${item.guid}, Type: ${item.category}, Name: ${item.data.Name?.value || "N/A"}`);
         }
       }
-      if (!this.isSelectionActive(token)) return;
-      if (this.deviceMenu) {
-        this.deviceMenu.setDetails(details);
-      }
-      this.postViewerSelection(device.id, details);
-
-      // Display IoT data
-      if (!this.isSelectionActive(token)) return;
-      if (!this.isEmbedded) {
-        await this.displayIoTData(device);
-      }
+    }
+    if (this.deviceMenu) {
+      this.deviceMenu.setDetails(details);
     }
   }
 

@@ -42,6 +42,15 @@ export class IfcPickController {
         const guid = data?._guid?.value;
         const ifcType = data?._category?.value;
         const name = data?.Name?.value;
+        console.log("Element Pick: ", { name, guid, ifcType });
+        console.log(  model);
+
+        //hightlightM = components.get(OBC.highlightController);
+
+        //console.log( await model)
+        console.log( await loader.fragments)
+        console.log( await loader)
+
 
         let handled = false;
         if (this.onPick) {
@@ -49,7 +58,11 @@ export class IfcPickController {
         }
 
         if (!handled) {
-          const color = new THREE.Color("purple");
+          await loader.fragments.resetHighlight();
+          //await model.setOpacity( [expressID], 0.1)
+          await this.dimAllMeshes(0.5);
+          const color = new THREE.Color("red");
+          
           await loader.fragments.highlight(
             {
               color,
@@ -59,11 +72,32 @@ export class IfcPickController {
             },
             modelIdMap,
           );
+          
           await loader.fragments.core.update(true);
+  
         }
       } catch (error) {
         console.error("Error:", error);
       }
     });
+  }
+
+  private async dimAllMeshes(opacity: number) {
+    if (!this.loader.fragments) return;
+    const gray = new THREE.Color("gray");
+    for (const model of this.loader.fragments.list.values()) {
+      if (!model) continue;
+      const ids = await model.getLocalIds();
+      const modelIdMap = { [model.modelId]: new Set(ids) };
+      await this.loader.fragments.highlight(
+        {
+          color: gray,
+          renderedFaces: FRAGS.RenderedFaces.ONE,
+          opacity,
+          transparent: true,
+        },
+        modelIdMap,
+      );
+    }
   }
 }

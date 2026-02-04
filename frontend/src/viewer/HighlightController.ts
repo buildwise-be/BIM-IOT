@@ -143,26 +143,20 @@ export class HighlightController {
   async highlightByExpressIDs(modelID: number, expressIDs: number[]) {
     if (!this.loader.fragments) return;
     await this.loader.fragments.resetHighlight();
+
+    // Dim everything first.
+    await this.dimAllModels(0.5);
+
     const modelIdMap = { [modelID]: new Set(expressIDs) };
-
     const model = this.loader.fragments.list.get(modelID);
-
-    /*for (const fragModel of this.loader.fragments.list.values()) {
-      // Apply opacity only, keep original colors.
-      this.restoreModelOpacity(fragModel);
-      this.applyModelOpacity(fragModel, 0.1);
-    }
-      */
-    
-    //await this.loader.fragments.setOpacity(0.1, modelIdMap,  );
     const color = new THREE.Color("red");
-
+    console.log(model)
     await this.loader.fragments.highlight(
       {
         color,
         renderedFaces: FRAGS.RenderedFaces.ONE,
         opacity: 1,
-        transparent: true,
+        transparent: false,
         preserveOriginalMaterial: false,
       },
       modelIdMap,
@@ -173,5 +167,24 @@ export class HighlightController {
     }
 
     await this.loader.fragments.core.update(true);
+  }
+
+  private async dimAllModels(opacity: number) {
+    if (!this.loader.fragments) return;
+    const gray = new THREE.Color("gray");
+    for (const model of this.loader.fragments.list.values()) {
+      if (!model) continue;
+      const ids = await model.getLocalIds();
+      const modelIdMap = { [model.modelId]: new Set(ids) };
+      await this.loader.fragments.highlight(
+        {
+          color: gray,
+          renderedFaces: FRAGS.RenderedFaces.ONE,
+          opacity,
+          transparent: true,
+        },
+        modelIdMap,
+      );
+    }
   }
 }
