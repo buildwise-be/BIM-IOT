@@ -17,7 +17,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      TB_BASE_URL: "http://thingsboard:8080"
       CORS_ORIGINS: "http://localhost:8081"
       DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
       MAPPING_DIR: "/app/data"

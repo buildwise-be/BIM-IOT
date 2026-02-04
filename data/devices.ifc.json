@@ -1,6 +1,6 @@
 {
   "model": {
-    "file": "model.ifc"
+    "file": "modelB4W.ifc"
   },
   "backend": {
     "middlewareUrl": "http://localhost:8000",
