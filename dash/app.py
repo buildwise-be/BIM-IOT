@@ -48,7 +48,7 @@ def fetch_telemetry(
     agg: str | None = None,
     start_ts: int | None = None,
     end_ts: int | None = None,
-    interval: int | None = None,
+    interval: str | None = None,
 ) -> Dict[str, Any]:
     if not mapping:
         raise RuntimeError("Mapping not loaded")
@@ -67,19 +67,112 @@ def fetch_telemetry(
     with httpx.Client(timeout=10) as client:
         response = client.get(url, params=params)
     if response.status_code != 200:
-        raise RuntimeError(f"Telemetry fetch failed: {response.status_code}")
+        detail = f"Telemetry fetch failed: {response.status_code}"
+        try:
+            payload = response.json()
+            message = payload.get("detail") or payload.get("message") or payload.get("error")
+            if message:
+                detail = f"Telemetry fetch failed: {message}"
+        except Exception:
+            if response.text.strip():
+                detail = f"Telemetry fetch failed: {response.text.strip()}"
+        raise RuntimeError(detail)
+    return response.json()
+
+
+def fetch_thingsboard_health() -> Dict[str, Any]:
+    url = f"{MIDDLEWARE_URL}/thingsboard/health"
+    with httpx.Client(timeout=5) as client:
+        response = client.get(url)
+    if response.status_code != 200:
+        return {"status": "error", "connected": False, "detail": f"{response.status_code}"}
     return response.json()
 
 
 dash_app = Dash(__name__, external_stylesheets=[dbc.themes.LUX, FONT_URL])
+dash_app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+          :root {
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(148, 163, 184, 0.25);
+            --ink: #0f172a;
+            --muted: #64748b;
+            --accent: #0ea5a4;
+          }
+
+          body {
+            font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+            background: radial-gradient(circle at top, #f8fafc 0%, #eef2ff 35%, #f8fafc 70%);
+            color: var(--ink);
+          }
+
+          .app-shell {
+            min-height: 100vh;
+          }
+
+          .glass-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 18px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+            backdrop-filter: blur(8px);
+          }
+
+          .soft-panel {
+            border-top: 1px solid rgba(148, 163, 184, 0.15);
+          }
+
+          .kpi-label {
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+          }
+
+          .kpi-value {
+            font-size: 26px;
+            font-weight: 600;
+            margin-top: 4px;
+          }
+
+          .kpi-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
+          }
+
+          .btn-primary {
+            background-color: var(--accent);
+            border-color: var(--accent);
+          }
+
+          .btn-primary:hover {
+            background-color: #0d9488;
+            border-color: #0d9488;
+          }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 
 
 dash_app.layout = html.Div(
-    style={
-        "fontFamily": "'Space Grotesk', 'Segoe UI', sans-serif",
-        "background": "radial-gradient(circle at top, #f8fafc 0%, #eef2ff 35%, #f8fafc 70%)",
-        "minHeight": "100vh",
-    },
+    className="app-shell",
     children=[
         dbc.Container(
             fluid=True,
@@ -121,6 +214,62 @@ dash_app.layout = html.Div(
                     ],
                 ),
                 dbc.Row(
+                    className="g-3 mb-3",
+                    children=[
+                        dbc.Col(
+                            md=3,
+                            children=[
+                                dbc.Card(
+                                    className="glass-card h-100",
+                                    children=[
+                                        dbc.CardBody(
+                                            children=[
+                                                html.Div("Devices", className="kpi-label"),
+                                                html.Div("0", id="kpi-devices-value", className="kpi-value"),
+                                                html.Div("Mapping loaded", className="kpi-sub"),
+                                            ]
+                                        )
+                                    ],
+                                )
+                            ],
+                        ),
+                        dbc.Col(
+                            md=3,
+                            children=[
+                                dbc.Card(
+                                    className="glass-card h-100",
+                                    children=[
+                                        dbc.CardBody(
+                                            children=[
+                                                html.Div("Auto refresh", className="kpi-label"),
+                                                html.Div("OFF", id="kpi-auto-value", className="kpi-value"),
+                                                html.Div("Telemetry", className="kpi-sub"),
+                                            ]
+                                        )
+                                    ],
+                                )
+                            ],
+                        ),
+                        dbc.Col(
+                            md=3,
+                            children=[
+                                dbc.Card(
+                                    className="glass-card h-100",
+                                    children=[
+                                        dbc.CardBody(
+                                            children=[
+                                                html.Div("Sync status", className="kpi-label"),
+                                                html.Div("N/A", id="kpi-sync-value", className="kpi-value"),
+                                                html.Div("Thingsboard", id="kpi-sync-sub", className="kpi-sub"),
+                                            ]
+                                        )
+                                    ],
+                                )
+                            ],
+                        ),
+                    ],
+                ),
+                dbc.Row(
                     className="g-3",
                     children=[
                         dbc.Col(
@@ -128,7 +277,7 @@ dash_app.layout = html.Div(
                             children=[
                                 dbc.Card(
                                     id="devices-panel",
-                                    className="shadow-sm border-0 h-100",
+                                    className="glass-card h-100",
                                     children=[
                                         dbc.CardHeader(
                                             className="d-flex justify-content-between align-items-center",
@@ -145,6 +294,7 @@ dash_app.layout = html.Div(
                                         ),
                                         dbc.CardBody(
                                             id="devices-body",
+                                            className="soft-panel",
                                             children=[
                                                 dbc.ButtonGroup(
                                                     className="mb-3",
@@ -191,7 +341,7 @@ dash_app.layout = html.Div(
                             children=[
                                 dbc.Card(
                                     id="telemetry-panel",
-                                    className="shadow-sm border-0 h-100",
+                                    className="glass-card h-100",
                                     children=[
                                         dbc.CardHeader(
                                             className="d-flex justify-content-between align-items-center",
@@ -208,6 +358,7 @@ dash_app.layout = html.Div(
                                         ),
                                         dbc.CardBody(
                                             id="telemetry-body",
+                                            className="soft-panel",
                                             children=[
                                                 dbc.Row(
                                                     className="g-2 align-items-center",
@@ -375,19 +526,37 @@ dash_app.layout = html.Div(
                                                                             style={"marginTop": "8px"},
                                                                         ),
                                                                         html.Div(
-                                                                            "Aggregation interval (seconds)",
+                                                                            "Aggregation interval",
                                                                             className="small text-muted mt-2",
                                                                         ),
-                                                                        dcc.Input(
-                                                                            id="telemetry-agg-interval",
-                                                                            type="number",
-                                                                            min=1,
-                                                                            max=3600,
-                                                                            value=60,
+                                                                        html.Div(
                                                                             style={
-                                                                                "width": "100%",
+                                                                                "display": "grid",
+                                                                                "gridTemplateColumns": "1fr 1fr",
+                                                                                "gap": "8px",
                                                                                 "marginTop": "8px",
                                                                             },
+                                                                            children=[
+                                                                                dcc.Input(
+                                                                                    id="telemetry-agg-interval-count",
+                                                                                    type="number",
+                                                                                    min=1,
+                                                                                    value=15,
+                                                                                    style={"width": "100%"},
+                                                                                ),
+                                                                                dcc.Dropdown(
+                                                                                    id="telemetry-agg-interval-unit",
+                                                                                    options=[
+                                                                                        {"label": "Minute", "value": "minute"},
+                                                                                        {"label": "Hour", "value": "hour"},
+                                                                                        {"label": "Day", "value": "day"},
+                                                                                        {"label": "Week", "value": "week"},
+                                                                                        {"label": "Month", "value": "month"},
+                                                                                        {"label": "Year", "value": "year"},
+                                                                                    ],
+                                                                                    value="minute",
+                                                                                ),
+                                                                            ],
                                                                         ),
                                                                         html.Div(
                                                                             "Keys (comma-separated)",
@@ -443,7 +612,7 @@ dash_app.layout = html.Div(
                             children=[
                                 dbc.Card(
                                     id="viewer-panel",
-                                    className="shadow-sm border-0",
+                                    className="glass-card",
                                     children=[
                                         dbc.CardHeader(
                                             className="d-flex justify-content-between align-items-center",
@@ -495,6 +664,7 @@ dash_app.layout = html.Div(
         dcc.Interval(id="mapping-init", interval=500, n_intervals=0, max_intervals=1),
         dcc.Interval(id="telemetry-auto-interval", interval=10000, n_intervals=0, disabled=True),
         dcc.Interval(id="viewer-event-poll", interval=500, n_intervals=0),
+        dcc.Interval(id="tb-health-interval", interval=15000, n_intervals=0),
         html.Script(
             """
             window.__viewerEvent = null;
@@ -534,6 +704,42 @@ def on_refresh_mapping(n_clicks, init_ticks):
         return mapping, options, f"Mapping loaded: {len(options)} devices.", {"type": "refreshMapping"}
     except Exception as exc:
         return no_update, [], f"Failed to load mapping: {exc}", no_update
+
+
+@dash_app.callback(
+    Output("kpi-devices-value", "children"),
+    Output("kpi-auto-value", "children"),
+    Output("kpi-sync-value", "children"),
+    Output("kpi-sync-sub", "children"),
+    Input("mapping-store", "data"),
+    Input("telemetry-auto-state", "data"),
+    Input("tb-health-interval", "n_intervals"),
+)
+def update_kpis(mapping, auto_state, n_intervals):
+    devices_count = len(mapping.get("devices", {})) if isinstance(mapping, dict) else 0
+    auto_text = "ON" if auto_state else "OFF"
+    sync_value = "N/A"
+    sync_sub = "Thingsboard"
+
+    if mapping:
+        try:
+            health = fetch_thingsboard_health()
+            if health.get("connected"):
+                sync_value = "ONLINE"
+                sync_sub = "Thingsboard connected"
+            else:
+                sync_value = "OFFLINE"
+                sync_sub = health.get("detail") or "Disconnected"
+        except Exception:
+            sync_value = "OFFLINE"
+            sync_sub = "Unavailable"
+
+    return (
+        str(devices_count),
+        auto_text,
+        sync_value,
+        sync_sub,
+    )
 
 
 @dash_app.callback(
@@ -586,7 +792,8 @@ def on_focus_device(n_clicks):
     State("telemetry-range", "start_date"),
     State("telemetry-range", "end_date"),
     State("telemetry-agg", "value"),
-    State("telemetry-agg-interval", "value"),
+    State("telemetry-agg-interval-count", "value"),
+    State("telemetry-agg-interval-unit", "value"),
     State("telemetry-keys", "value"),
 )
 def on_load_telemetry(
@@ -603,7 +810,8 @@ def on_load_telemetry(
     range_start,
     range_end,
     agg,
-    agg_interval,
+    agg_interval_count,
+    agg_interval_unit,
     keys_input,
 ):
     auto_enabled = bool(auto_enabled_input)
@@ -629,11 +837,22 @@ def on_load_telemetry(
         if keys_input:
             keys_value = ",".join([item.strip() for item in keys_input.split(",") if item.strip()])
 
-        interval_ms = None
-        try:
-            interval_ms = int(agg_interval or 0) * 1000
-        except (TypeError, ValueError):
-            interval_ms = None
+        interval_value = None
+        if agg_interval_count and agg_interval_unit:
+            unit_ms = {
+                "minute": 60_000,
+                "hour": 3_600_000,
+                "day": 86_400_000,
+                "week": 7 * 86_400_000,
+                "month": 30 * 86_400_000,
+                "year": 365 * 86_400_000,
+            }.get(str(agg_interval_unit).lower())
+            try:
+                count = int(agg_interval_count)
+            except (TypeError, ValueError):
+                count = 0
+            if unit_ms and count > 0:
+                interval_value = str(unit_ms * count)
 
         device_ids = selected_device if isinstance(selected_device, list) else [selected_device]
         tabs = []
@@ -649,7 +868,7 @@ def on_load_telemetry(
                 agg,
                 start_ts,
                 end_ts,
-                interval_ms,
+                interval_value,
             )
 
             fig = go.Figure()

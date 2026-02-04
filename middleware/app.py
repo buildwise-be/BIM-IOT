@@ -97,6 +97,28 @@ def parse_jwt_exp(token: str) -> int:
         return 0
 
 
+def parse_interval_ms(value: Optional[str]) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    normalized = str(value).strip().lower()
+    mapping = {
+        "minute": 60_000,
+        "hour": 3_600_000,
+        "day": 86_400_000,
+        "week": 7 * 86_400_000,
+        "month": 30 * 86_400_000,
+        "year": 365 * 86_400_000,
+    }
+    if normalized in mapping:
+        return mapping[normalized]
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid interval. Use minute, hour, day, week, month, year, or a numeric value in ms.",
+    )
+
+
 class ThingsBoardClient:
     def __init__(self) -> None:
         self._token: Optional[str] = None
@@ -183,7 +205,17 @@ class ThingsBoardClient:
                 response = await client.get(url, params=params, headers=headers)
 
         if response.status_code != 200:
-            raise HTTPException(status_code=502, detail="ThingsBoard telemetry fetch failed.")
+            detail = "ThingsBoard telemetry fetch failed."
+            try:
+                payload = response.json()
+                message = payload.get("message") or payload.get("error") or payload.get("detail")
+                if message:
+                    detail = f"ThingsBoard error: {message}"
+            except Exception:
+                text = response.text.strip()
+                if text:
+                    detail = f"ThingsBoard error: {text}"
+            raise HTTPException(status_code=502, detail=detail)
 
         payload = response.json()
         series: Dict[str, List[Dict[str, Any]]] = {}
@@ -279,6 +311,34 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/thingsboard/health")
+async def thingsboard_health() -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    settings = get_tb_settings(mapping)
+    base_url = TB_BASE_URL or settings.get("baseUrl")
+    if not base_url:
+        return {"status": "error", "connected": False, "detail": "Missing ThingsBoard baseUrl."}
+    try:
+        headers = await tb_client._get_auth_header(mapping)
+    except HTTPException as exc:
+        return {"status": "error", "connected": False, "detail": exc.detail}
+    except Exception as exc:
+        return {"status": "error", "connected": False, "detail": str(exc)}
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(f"{base_url}/api/system/info", headers=headers)
+        if response.status_code == 200:
+            return {"status": "ok", "connected": True}
+        return {
+            "status": "error",
+            "connected": False,
+            "detail": f"ThingsBoard response: {response.status_code}",
+        }
+    except Exception as exc:
+        return {"status": "error", "connected": False, "detail": str(exc)}
+
+
 @app.get("/devices")
 def list_devices() -> Dict[str, Any]:
     mapping = load_mapping_cached()
@@ -324,10 +384,13 @@ async def device_telemetry(
     agg: Optional[str] = Query(default=None),
     start_ts: Optional[int] = Query(default=None, alias="startTs"),
     end_ts: Optional[int] = Query(default=None, alias="endTs"),
-    interval: Optional[int] = Query(default=None, description="Aggregation interval in ms"),
+    interval: Optional[str] = Query(
+        default=None, description="Aggregation interval (minute/hour/day/week/month/year or ms)"
+    ),
 ) -> Dict[str, Any]:
     mapping = load_mapping_cached()
-    return await build_telemetry(mapping, device_id, key, limit, hours, agg, start_ts, end_ts, interval)
+    interval_ms = parse_interval_ms(interval)
+    return await build_telemetry(mapping, device_id, key, limit, hours, agg, start_ts, end_ts, interval_ms)
 
 
 if __name__ == "__main__":
