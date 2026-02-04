@@ -12,6 +12,7 @@ export type IoTDevice = {
 export class IfcIoTLinker {
   private devices: IoTDevice[] = [];
   private guidToExpressId: Map<string, number> = new Map();
+  private guidToDevice: Map<string, IoTDevice> = new Map();
 
   constructor(
     mapping: {
@@ -24,14 +25,24 @@ export class IfcIoTLinker {
   ) {
     this.devices = this.buildDevices(mapping);
     this.guidToExpressId = guidMap;
+    this.guidToDevice = this.buildGuidToDeviceMap(this.devices);
   }
 
   updateMapping(mapping: { devices?: Record<string, { type: string; ifcGuids: string[]; connector?: { type: string; deviceId?: string; telemetryKey?: string } }> }) {
     this.devices = this.buildDevices(mapping);
+    this.guidToDevice = this.buildGuidToDeviceMap(this.devices);
   }
 
   getDevices(): IoTDevice[] {
     return this.devices;
+  }
+
+  getDeviceById(deviceId: string): IoTDevice | undefined {
+    return this.devices.find((device) => device.id === deviceId);
+  }
+
+  getDeviceByGuid(guid: string): IoTDevice | undefined {
+    return this.guidToDevice.get(guid);
   }
 
   getGuidsForDevice(deviceId: string): string[] {
@@ -51,5 +62,17 @@ export class IfcIoTLinker {
       ifcGuids: data.ifcGuids,
       connector: data.connector,
     }));
+  }
+
+  private buildGuidToDeviceMap(devices: IoTDevice[]): Map<string, IoTDevice> {
+    const map = new Map<string, IoTDevice>();
+    for (const device of devices) {
+      for (const guid of device.ifcGuids || []) {
+        if (!map.has(guid)) {
+          map.set(guid, device);
+        }
+      }
+    }
+    return map;
   }
 }

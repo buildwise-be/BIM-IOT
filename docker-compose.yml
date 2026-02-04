@@ -1,4 +1,17 @@
 services:
+  dash:
+    restart: always
+    build:
+      context: .
+      dockerfile: dash/Dockerfile
+    ports:
+      - "8050:8050"
+    environment:
+      MIDDLEWARE_URL: "http://middleware:8000"
+      DASH_VIEWER_URL: "http://localhost:8081"
+    depends_on:
+      - middleware
+
   frontend:
     restart: always
     build:
@@ -17,7 +30,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      CORS_ORIGINS: "http://localhost:8081"
+      CORS_ORIGINS: "http://localhost:8081,http://localhost:8050"
       DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
       MAPPING_DIR: "/app/data"
     volumes:

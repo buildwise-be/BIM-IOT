@@ -20,6 +20,8 @@ export class AppController {
   private apiBaseUrl = "";
   private mapping: any;
   private modelFile = "model.ifc";
+  private isEmbedded = false;
+  private initialCamera?: { position: THREE.Vector3; target: THREE.Vector3 };
 
   private isSelectionActive(token: number): boolean {
     return token === this.selectionToken;
@@ -52,6 +54,8 @@ export class AppController {
     const container = document.getElementById("viewer");
     if (!container) throw new Error("Viewer container not found");
 
+    this.isEmbedded = window !== window.parent;
+
     const bootstrapUrl = this.getBootstrapUrl();
     await this.ensureMappingLoaded(bootstrapUrl);
     const devicesData = await this.fetchMapping(bootstrapUrl, true);
@@ -65,6 +69,9 @@ export class AppController {
     this.world = viewer.world;
 
     this.initSplitLayout();
+    if (this.isEmbedded) {
+      this.hideTelemetryPanel();
+    }
 
     // Handle container resize to maintain aspect ratio
     const resizeObserver = new ResizeObserver(() => {
@@ -83,12 +90,15 @@ export class AppController {
     this.loader = new FragmentLoader(viewer);
     await this.loader.load(modelUrl);
 
+    this.captureInitialCamera();
+
     // Pass loader and canvas
     const pickController = new IfcPickController(
       this.components,
       this.world,
       this.world.renderer.three.domElement,
-      this.loader
+      this.loader,
+      (payload) => this.handlePick(payload)
     );
 
     this.highlightController = new HighlightController(this.loader);
@@ -116,7 +126,12 @@ export class AppController {
     // Load devices data
     this.ifcIoTLinker = new IfcIoTLinker(devicesData, guidMap);
 
-    this.initDeviceMenu();
+    if (!this.isEmbedded) {
+      this.initDeviceMenu();
+    }
+
+    this.setupMessageBridge();
+    this.notifyDevicesUpdated();
 
     console.log("App ready - IFC picking safe");
   }
@@ -190,9 +205,151 @@ export class AppController {
     );
   }
 
+  private hideTelemetryPanel(): void {
+    const topContainer = document.getElementById("top-container");
+    const bottomContainer = document.getElementById("iot-data");
+    const splitter = document.getElementById("splitter");
+    if (bottomContainer) {
+      bottomContainer.style.display = "none";
+    }
+    if (splitter) {
+      splitter.style.display = "none";
+    }
+    if (topContainer) {
+      topContainer.style.height = "100vh";
+    }
+  }
+
+  private setupMessageBridge(): void {
+    window.addEventListener("message", (event) => {
+      const payload = event.data;
+      if (!payload || typeof payload !== "object") return;
+      if (payload.type === "selectDevice") {
+        const deviceId = String(payload.deviceId || "");
+        if (deviceId) {
+          this.selectDeviceById(deviceId);
+        }
+      }
+      if (payload.type === "resetSelection") {
+        this.resetSelection();
+      }
+      if (payload.type === "refreshMapping") {
+        this.refreshMapping();
+      }
+      if (payload.type === "focusDevice") {
+        const deviceId = String(payload.deviceId || "");
+        if (deviceId) {
+          this.focusDeviceById(deviceId);
+        }
+      }
+      if (payload.type === "focusModel") {
+        this.focusModel();
+      }
+    });
+
+    try {
+      window.parent?.postMessage({ type: "viewerReady" }, "*");
+    } catch {
+      // no-op
+    }
+  }
+
+  private notifyDevicesUpdated(): void {
+    if (!this.isEmbedded) return;
+    const devices = this.ifcIoTLinker.getDevices().map((device) => ({
+      id: device.id,
+      type: device.type,
+    }));
+    try {
+      window.parent?.postMessage({ type: "devicesUpdated", devices }, "*");
+    } catch {
+      // no-op
+    }
+  }
+
+  private postViewerSelection(deviceId: string, details: string[]) {
+    if (!this.isEmbedded) return;
+    try {
+      window.parent?.postMessage(
+        { type: "viewerSelection", deviceId, details },
+        "*"
+      );
+    } catch {
+      // no-op
+    }
+  }
+
+  private async selectDeviceById(deviceId: string): Promise<void> {
+    const device = this.ifcIoTLinker.getDeviceById(deviceId);
+    if (!device) return;
+    await this.onDeviceSelected(device);
+  }
+
+  private async focusDeviceById(deviceId: string): Promise<void> {
+    const device = this.ifcIoTLinker.getDeviceById(deviceId);
+    if (!device) return;
+    const expressIDs = await this.resolveExpressIds(device);
+    if (!expressIDs.length) return;
+    await this.focusOnExpressIDs(expressIDs);
+  }
+
+  private captureInitialCamera(): void {
+    const camera = this.world?.camera?.three as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
+    const controls = this.world?.camera?.controls;
+    if (!camera || !controls) return;
+
+    const pos = new THREE.Vector3();
+    const target = new THREE.Vector3();
+    if (typeof controls.getPosition === "function") {
+      controls.getPosition(pos);
+    } else {
+      pos.copy(camera.position);
+    }
+    if (typeof controls.getTarget === "function") {
+      controls.getTarget(target);
+    } else {
+      target.set(0, 0, 0);
+    }
+    this.initialCamera = { position: pos, target };
+  }
+
+  private focusModel(): void {
+    if (!this.initialCamera) {
+      this.captureInitialCamera();
+    }
+    if (!this.initialCamera) return;
+    const controls = this.world?.camera?.controls;
+    if (!controls) return;
+    const pos = this.initialCamera.position;
+    const target = this.initialCamera.target;
+    controls.setLookAt(pos.x, pos.y, pos.z, target.x, target.y, target.z, true);
+  }
+
+  private async handlePick(payload: { expressID: number; guid?: string; ifcType?: string; name?: string }): Promise<boolean> {
+    const guid = payload.guid;
+    if (!guid) return false;
+    const device = this.ifcIoTLinker.getDeviceByGuid(guid);
+    if (!device) return false;
+    await this.onDeviceSelected(device);
+    return true;
+  }
+
+  private async resetSelection(): Promise<void> {
+    this.selectionToken++;
+    await this.highlightController.runExclusive(() => this.highlightController.resetAllHighlights());
+    if (this.deviceMenu) {
+      this.deviceMenu.clearDetails();
+    }
+    const iotDataDiv = document.getElementById("iot-data");
+    if (iotDataDiv) {
+      iotDataDiv.innerHTML = "";
+    }
+  }
+
   private async refreshMapping(): Promise<void> {
-    if (!this.deviceMenu) return;
-    this.deviceMenu.setRefreshing(true);
+    if (this.deviceMenu) {
+      this.deviceMenu.setRefreshing(true);
+    }
     try {
       const bootstrapUrl = this.getBootstrapUrl();
       await this.ensureMappingLoaded(bootstrapUrl);
@@ -204,11 +361,15 @@ export class AppController {
       this.modelFile = (devicesData as any).model?.file || "model.ifc";
 
       this.ifcIoTLinker.updateMapping(devicesData);
-      this.deviceMenu.setDevices(this.ifcIoTLinker.getDevices());
-      this.deviceMenu.clearDetails();
+      if (this.deviceMenu) {
+        this.deviceMenu.setDevices(this.ifcIoTLinker.getDevices());
+        this.deviceMenu.clearDetails();
+      }
 
       this.selectionToken++;
       await this.highlightController.runExclusive(() => this.highlightController.resetAllHighlights());
+
+      this.notifyDevicesUpdated();
 
       if (previousModelFile && this.modelFile !== previousModelFile) {
         console.warn(
@@ -218,7 +379,9 @@ export class AppController {
     } catch (error) {
       console.error("Failed to refresh devices mapping", error);
     } finally {
-      this.deviceMenu.setRefreshing(false);
+      if (this.deviceMenu) {
+        this.deviceMenu.setRefreshing(false);
+      }
     }
   }
 
@@ -226,14 +389,7 @@ export class AppController {
     console.log("onDeviceSelected", device);
 
     const token = ++this.selectionToken;
-    const expressIDs: number[] = [];
-    for (const guid of device.ifcGuids) {
-      console.log("processing guid", guid);
-      const expressID = await this.ifcIoTLinker.getExpressIdFromGuid(this.modelID, guid);
-      if (expressID !== undefined) {
-        expressIDs.push(expressID);
-      }
-    }
+    const expressIDs = await this.resolveExpressIds(device);
 
     if (!this.isSelectionActive(token)) return;
 
@@ -256,11 +412,16 @@ export class AppController {
         }
       }
       if (!this.isSelectionActive(token)) return;
-      this.deviceMenu.setDetails(details);
+      if (this.deviceMenu) {
+        this.deviceMenu.setDetails(details);
+      }
+      this.postViewerSelection(device.id, details);
 
       // Display IoT data
       if (!this.isSelectionActive(token)) return;
-      await this.displayIoTData(device);
+      if (!this.isEmbedded) {
+        await this.displayIoTData(device);
+      }
     }
   }
 
@@ -306,6 +467,17 @@ export class AppController {
 
     const newPos = center.clone().add(dir.multiplyScalar(distance));
     controls.setLookAt(newPos.x, newPos.y, newPos.z, center.x, center.y, center.z, true);
+  }
+
+  private async resolveExpressIds(device: any): Promise<number[]> {
+    const expressIDs: number[] = [];
+    for (const guid of device.ifcGuids || []) {
+      const expressID = await this.ifcIoTLinker.getExpressIdFromGuid(this.modelID, guid);
+      if (expressID !== undefined) {
+        expressIDs.push(expressID);
+      }
+    }
+    return expressIDs;
   }
 
   private async displayIoTData(device: any): Promise<void> {

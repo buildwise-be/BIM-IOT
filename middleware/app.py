@@ -45,7 +45,7 @@ def load_mapping_cached() -> Dict[str, Any]:
     if _mapping_cache is None:
         raise HTTPException(
             status_code=503,
-            detail="Mapping not loaded. Call POST /refresh-mapping to load devices.ifc.json.",
+            detail="Mapping not loaded. Call POST /refresh_mapping to load devices.ifc.json.",
         )
     return _mapping_cache
 
@@ -195,56 +195,13 @@ class ThingsBoardClient:
 tb_client = ThingsBoardClient()
 
 
-@app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/devices")
-def list_devices() -> Dict[str, Any]:
-    mapping = load_mapping_cached()
-    devices = []
-    for device_id, data in mapping.get("devices", {}).items():
-        devices.append(
-            {
-                "id": device_id,
-                "type": data.get("type"),
-                "connector": data.get("connector", {}),
-            }
-        )
-    return {"devices": devices}
-
-
-@app.get("/devices.ifc.json")
-def get_mapping() -> Dict[str, Any]:
-    return load_mapping_cached()
-
-
-
-@app.post("/refresh_mapping")
-def refresh_mapping_endpoint() -> Dict[str, Any]:
-    mapping = refresh_mapping()
-    return {
-        "status": "ok",
-        "path": DEVICE_MAPPING_PATH,
-        "deviceCount": len(mapping.get("devices", {})),
-    }
-
-
-@app.get("/model/{filename}")
-def get_model(filename: str) -> FileResponse:
-    path = resolve_model_path(filename)
-    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
-
-
-@app.get("/devices/{device_id}/telemetry")
-async def device_telemetry(
+async def build_telemetry(
+    mapping: Dict[str, Any],
     device_id: str,
-    key: Optional[str] = Query(default=None),
-    limit: int = Query(default=24, ge=1, le=200),
-    hours: int = Query(default=24, ge=1, le=168),
+    key: Optional[str],
+    limit: int,
+    hours: int,
 ) -> Dict[str, Any]:
-    mapping = load_mapping_cached()
     device = get_device(mapping, device_id)
 
     connector = device.get("connector", {})
@@ -284,6 +241,58 @@ async def device_telemetry(
         return {"deviceId": device_id, "key": telemetry_key, "points": points}
 
     raise HTTPException(status_code=400, detail=f"Unsupported connector type: {connector_type}")
+
+
+@app.get("/health")
+def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/devices")
+def list_devices() -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    devices = []
+    for device_id, data in mapping.get("devices", {}).items():
+        devices.append(
+            {
+                "id": device_id,
+                "type": data.get("type"),
+                "connector": data.get("connector", {}),
+            }
+        )
+    return {"devices": devices}
+
+
+@app.get("/devices.ifc.json")
+def get_mapping() -> Dict[str, Any]:
+    return load_mapping_cached()
+
+
+@app.post("/refresh_mapping")
+def refresh_mapping_endpoint() -> Dict[str, Any]:
+    mapping = refresh_mapping()
+    return {
+        "status": "ok",
+        "path": DEVICE_MAPPING_PATH,
+        "deviceCount": len(mapping.get("devices", {})),
+    }
+
+
+@app.get("/model/{filename}")
+def get_model(filename: str) -> FileResponse:
+    path = resolve_model_path(filename)
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+
+
+@app.get("/devices/{device_id}/telemetry")
+async def device_telemetry(
+    device_id: str,
+    key: Optional[str] = Query(default=None),
+    limit: int = Query(default=24, ge=1, le=200),
+    hours: int = Query(default=24, ge=1, le=168),
+) -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    return await build_telemetry(mapping, device_id, key, limit, hours)
 
 
 if __name__ == "__main__":

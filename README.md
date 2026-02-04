@@ -9,6 +9,9 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
   - Loads an IFC and builds a GUID -> expressID mapping.
   - Loads device mapping from the middleware (`/devices.ifc.json`).
   - Displays telemetry with a chart (Chart.js).
+- Dashboard (Dash + Plotly, service dédié)
+  - Refreshes the device mapping on demand.
+  - Displays telemetry charts and embeds the Vite 3D viewer.
 - Middleware (FastAPI)
   - Exposes a simple API for the front: `/devices` and `/devices/{id}/telemetry`.
   - Queries Thingsboard via REST (JWT or ApiKey).
@@ -56,6 +59,7 @@ docker compose up -d --build
 Exposed services:
 - Frontend: `http://localhost:8081`
 - Middleware: `http://localhost:8000`
+- Dash dashboard: `http://localhost:8050`
 - Thingsboard: `http://localhost:7000`
 
 If the middleware runs on a different host/port, set `VITE_MIDDLEWARE_URL` when building the frontend.
@@ -65,7 +69,7 @@ Place the mapping + IFC model in `data/` (mounted into the middleware as `/app/d
 - `data/devices.ifc.json`
 - `data/<your-model>.ifc`
 
-The middleware serves:
+The middleware serves (after calling `POST /refresh_mapping`):
 - `http://localhost:8000/devices.ifc.json`
 - `http://localhost:8000/model/<file>`
 
