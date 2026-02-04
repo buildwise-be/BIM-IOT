@@ -7,13 +7,19 @@ export class DeviceMenu {
   private container: HTMLElement;
   private isCollapsed = false;
   private collapseButton: HTMLButtonElement;
+  private refreshButton: HTMLButtonElement;
+  private onSelect: (device: IoTDevice) => void;
+  private onRefresh: () => void;
 
   constructor(
     container: HTMLElement,
     devices: IoTDevice[],
-    onSelect: (device: IoTDevice) => void
+    onSelect: (device: IoTDevice) => void,
+    onRefresh: () => void
   ) {
     this.container = container;
+    this.onSelect = onSelect;
+    this.onRefresh = onRefresh;
 
     this.menu = document.createElement("div");
     this.menu.className = "device-menu";
@@ -28,16 +34,27 @@ export class DeviceMenu {
     const actions = document.createElement("div");
     actions.className = "device-menu-actions";
 
+    this.refreshButton = document.createElement("button");
+    this.refreshButton.className = "device-menu-action";
+    this.refreshButton.type = "button";
+    this.refreshButton.title = "Refresh devices";
+    this.refreshButton.textContent = "⟳";
+    this.refreshButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.onRefresh();
+    });
+
     this.collapseButton = document.createElement("button");
     this.collapseButton.className = "device-menu-action";
     this.collapseButton.type = "button";
     this.collapseButton.title = "Toggle menu";
-    this.collapseButton.textContent = "–";
+    this.collapseButton.textContent = "-";
     this.collapseButton.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleCollapsed();
     });
 
+    actions.appendChild(this.refreshButton);
     actions.appendChild(this.collapseButton);
     header.appendChild(title);
     header.appendChild(actions);
@@ -46,12 +63,7 @@ export class DeviceMenu {
     this.menuBody = document.createElement("div");
     this.menuBody.className = "device-menu-body";
 
-    devices.forEach((device) => {
-      const button = document.createElement("button");
-      button.textContent = `${device.id} (${device.type})`;
-      button.onclick = () => onSelect(device);
-      this.menuBody.appendChild(button);
-    });
+    this.renderDevices(devices);
 
     this.detailsDiv = document.createElement("div");
     this.detailsDiv.className = "device-details";
@@ -65,11 +77,26 @@ export class DeviceMenu {
 
   setDetails(details: string[]) {
     this.detailsDiv.innerHTML = "<h4>IFC Elements:</h4>";
-    details.forEach(detail => {
+    details.forEach((detail) => {
       const p = document.createElement("p");
       p.textContent = detail;
       this.detailsDiv.appendChild(p);
     });
+  }
+
+  clearDetails() {
+    this.detailsDiv.innerHTML = "";
+  }
+
+  setDevices(devices: IoTDevice[]) {
+    this.menuBody.innerHTML = "";
+    this.renderDevices(devices);
+    this.menuBody.appendChild(this.detailsDiv);
+  }
+
+  setRefreshing(isRefreshing: boolean) {
+    this.refreshButton.disabled = isRefreshing;
+    this.refreshButton.textContent = isRefreshing ? "⟳" : "⟳";
   }
 
   private toggleCollapsed() {
@@ -79,8 +106,17 @@ export class DeviceMenu {
       this.collapseButton.textContent = "+";
     } else {
       this.menu.classList.remove("collapsed");
-      this.collapseButton.textContent = "–";
+      this.collapseButton.textContent = "-";
     }
+  }
+
+  private renderDevices(devices: IoTDevice[]) {
+    devices.forEach((device) => {
+      const button = document.createElement("button");
+      button.textContent = `${device.id} (${device.type})`;
+      button.onclick = () => this.onSelect(device);
+      this.menuBody.appendChild(button);
+    });
   }
 
   private enableDrag(handle: HTMLElement) {

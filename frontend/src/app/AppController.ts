@@ -5,7 +5,7 @@ import { HighlightController } from "../viewer/HighlightController";
 import { DeviceMenu } from "../ui/DeviceMenu";
 import { IfcIoTLinker } from "../domain/IfcIoTLinker";
 import * as OBC from "@thatopen/components";
-import Chart from 'chart.js/auto';
+import Chart from "chart.js/auto";
 import * as THREE from "three";
 
 export class AppController {
@@ -18,6 +18,8 @@ export class AppController {
   private deviceMenu: DeviceMenu;
   private selectionToken = 0;
   private apiBaseUrl = "";
+  private mapping: any;
+  private modelFile = "model.ifc";
 
   private isSelectionActive(token: number): boolean {
     return token === this.selectionToken;
@@ -28,13 +30,22 @@ export class AppController {
     return (envUrl || "http://localhost:8000").replace(/\/$/, "");
   }
 
-  private async fetchMapping(baseUrl: string): Promise<any> {
-    const url = `${baseUrl}/devices.ifc.json`;
-    const response = await fetch(url);
+  private async fetchMapping(baseUrl: string, cacheBust = false): Promise<any> {
+    const suffix = cacheBust ? `${baseUrl.includes("?") ? "&" : "?"}ts=${Date.now()}` : "";
+    const url = `${baseUrl}/devices.ifc.json${suffix}`;
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Failed to load mapping from ${url}: ${response.status}`);
     }
     return response.json();
+  }
+
+  private async ensureMappingLoaded(baseUrl: string): Promise<void> {
+    const url = `${baseUrl}/refresh_mapping`;
+    const response = await fetch(url, { method: "POST" });
+    if (!response.ok) {
+      throw new Error(`Failed to refresh mapping at ${url}: ${response.status}`);
+    }
   }
 
   async init() {
@@ -42,10 +53,12 @@ export class AppController {
     if (!container) throw new Error("Viewer container not found");
 
     const bootstrapUrl = this.getBootstrapUrl();
-    const devicesData = await this.fetchMapping(bootstrapUrl);
+    await this.ensureMappingLoaded(bootstrapUrl);
+    const devicesData = await this.fetchMapping(bootstrapUrl, true);
+    this.mapping = devicesData;
     this.apiBaseUrl = ((devicesData as any).backend?.middlewareUrl || bootstrapUrl).replace(/\/$/, "");
-    const modelFile = (devicesData as any).model?.file || "model.ifc";
-    const modelUrl = `${this.apiBaseUrl}/model/${encodeURIComponent(modelFile)}`;
+    this.modelFile = (devicesData as any).model?.file || "model.ifc";
+    const modelUrl = `${this.apiBaseUrl}/model/${encodeURIComponent(this.modelFile)}`;
 
     const viewer = ViewerFactory.create(container);
     this.components = viewer.components;
@@ -70,12 +83,12 @@ export class AppController {
     this.loader = new FragmentLoader(viewer);
     await this.loader.load(modelUrl);
 
-    // 🔥 Passer le loader ET le canvas
+    // Pass loader and canvas
     const pickController = new IfcPickController(
       this.components,
       this.world,
       this.world.renderer.three.domElement,
-      this.loader // 🔥 Passer le loader en dernier
+      this.loader
     );
 
     this.highlightController = new HighlightController(this.loader);
@@ -104,8 +117,8 @@ export class AppController {
     this.ifcIoTLinker = new IfcIoTLinker(devicesData, guidMap);
 
     this.initDeviceMenu();
-    
-    console.log("✅ App ready – IFC picking SAFE");
+
+    console.log("App ready - IFC picking safe");
   }
 
   private initSplitLayout(): void {
@@ -172,8 +185,41 @@ export class AppController {
     this.deviceMenu = new DeviceMenu(
       viewerContainer,
       this.ifcIoTLinker.getDevices(),
-      (device) => this.onDeviceSelected(device)
+      (device) => this.onDeviceSelected(device),
+      () => this.refreshMapping()
     );
+  }
+
+  private async refreshMapping(): Promise<void> {
+    if (!this.deviceMenu) return;
+    this.deviceMenu.setRefreshing(true);
+    try {
+      const bootstrapUrl = this.getBootstrapUrl();
+      await this.ensureMappingLoaded(bootstrapUrl);
+      const devicesData = await this.fetchMapping(bootstrapUrl, true);
+      const previousModelFile = this.modelFile;
+
+      this.mapping = devicesData;
+      this.apiBaseUrl = ((devicesData as any).backend?.middlewareUrl || bootstrapUrl).replace(/\/$/, "");
+      this.modelFile = (devicesData as any).model?.file || "model.ifc";
+
+      this.ifcIoTLinker.updateMapping(devicesData);
+      this.deviceMenu.setDevices(this.ifcIoTLinker.getDevices());
+      this.deviceMenu.clearDetails();
+
+      this.selectionToken++;
+      await this.highlightController.runExclusive(() => this.highlightController.resetAllHighlights());
+
+      if (previousModelFile && this.modelFile !== previousModelFile) {
+        console.warn(
+          `Model file changed from ${previousModelFile} to ${this.modelFile}. Reload the page to load the new model.`
+        );
+      }
+    } catch (error) {
+      console.error("Failed to refresh devices mapping", error);
+    } finally {
+      this.deviceMenu.setRefreshing(false);
+    }
   }
 
   private async onDeviceSelected(device: any): Promise<void> {
@@ -193,13 +239,8 @@ export class AppController {
 
     if (expressIDs.length > 0) {
       await this.highlightController.runExclusive(async () => {
-        //if (!this.isSelectionActive(token)) return;
-        //await this.highlightController.resetAllHighlights();
         if (!this.isSelectionActive(token)) return;
         await this.highlightController.highlightByExpressIDs(this.modelID, expressIDs);
-        //if (!this.isSelectionActive(token)) {
-        //  await this.highlightController.resetAllHighlights();
-        //}
       });
       if (!this.isSelectionActive(token)) return;
       await this.focusOnExpressIDs(expressIDs);
@@ -211,7 +252,7 @@ export class AppController {
       for (const expressID of expressIDs) {
         const item = itemsMap.get(expressID);
         if (item) {
-          details.push(`GUID: ${item.guid}, Type: ${item.category}, Name: ${item.data.Name?.value || 'N/A'}`);
+          details.push(`GUID: ${item.guid}, Type: ${item.category}, Name: ${item.data.Name?.value || "N/A"}`);
         }
       }
       if (!this.isSelectionActive(token)) return;
@@ -333,7 +374,7 @@ export class AppController {
           {
             label:
               device.type === "temperature"
-                ? "Temperature (°C)"
+                ? "Temperature (C)"
                 : device.type === "humidity"
                 ? "Humidity (%)"
                 : "Value",

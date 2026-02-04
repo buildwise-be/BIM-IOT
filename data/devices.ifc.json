@@ -12,7 +12,7 @@
   "devices": {
     "DEV_1": {
       "type": "temperature",
-      "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28", "3TazwRY9P9VBCwM4_ANS28"],
+      "ifcGuids": ["3VKCH25GrF$RO4tHl7y4__", "3jqBOilKL8$uvNq5pJRWN7"],
       "connector": {
         "type": "thingsboard",
         "deviceId": "f34a1140-0113-11f1-873e-85f6dc6f3a3d",
@@ -23,7 +23,7 @@
     },
     "DEV_2": {
       "type": "humidity",
-      "ifcGuids": ["25H37vVhla0odoVV0iLOox"],
+      "ifcGuids": ["0YFYIiyWn8qwpmZe1fFIt2", "2vroSGn5DF2Bty3LVNwGBP","3lvwIq7Tn7mfYc8c_dsXcv", "", ""],
       "connector": {
         "type": "thingsboard",
         "deviceId": "0129b400-0114-11f1-873e-85f6dc6f3a3d",

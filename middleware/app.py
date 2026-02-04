@@ -31,11 +31,29 @@ app.add_middleware(
 )
 
 
-def load_mapping() -> Dict[str, Any]:
+_mapping_cache: Optional[Dict[str, Any]] = None
+
+
+def read_mapping_file() -> Dict[str, Any]:
     if not os.path.exists(DEVICE_MAPPING_PATH):
         raise HTTPException(status_code=500, detail=f"Mapping not found: {DEVICE_MAPPING_PATH}")
     with open(DEVICE_MAPPING_PATH, "r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_mapping_cached() -> Dict[str, Any]:
+    if _mapping_cache is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Mapping not loaded. Call POST /refresh-mapping to load devices.ifc.json.",
+        )
+    return _mapping_cache
+
+
+def refresh_mapping() -> Dict[str, Any]:
+    global _mapping_cache
+    _mapping_cache = read_mapping_file()
+    return _mapping_cache
 
 
 def resolve_model_path(filename: str) -> Path:
@@ -184,7 +202,7 @@ def health() -> Dict[str, str]:
 
 @app.get("/devices")
 def list_devices() -> Dict[str, Any]:
-    mapping = load_mapping()
+    mapping = load_mapping_cached()
     devices = []
     for device_id, data in mapping.get("devices", {}).items():
         devices.append(
@@ -199,7 +217,18 @@ def list_devices() -> Dict[str, Any]:
 
 @app.get("/devices.ifc.json")
 def get_mapping() -> Dict[str, Any]:
-    return load_mapping()
+    return load_mapping_cached()
+
+
+
+@app.post("/refresh_mapping")
+def refresh_mapping_endpoint() -> Dict[str, Any]:
+    mapping = refresh_mapping()
+    return {
+        "status": "ok",
+        "path": DEVICE_MAPPING_PATH,
+        "deviceCount": len(mapping.get("devices", {})),
+    }
 
 
 @app.get("/model/{filename}")
@@ -215,7 +244,7 @@ async def device_telemetry(
     limit: int = Query(default=24, ge=1, le=200),
     hours: int = Query(default=24, ge=1, le=168),
 ) -> Dict[str, Any]:
-    mapping = load_mapping()
+    mapping = load_mapping_cached()
     device = get_device(mapping, device_id)
 
     connector = device.get("connector", {})
