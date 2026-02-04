@@ -2,14 +2,17 @@ import base64
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-DEVICE_MAPPING_PATH = os.getenv("DEVICE_MAPPING_PATH", "frontend/src/data/devices.ifc.json")
+DEVICE_MAPPING_PATH = os.getenv("DEVICE_MAPPING_PATH", "mapping/devices.ifc.json")
+MAPPING_DIR = Path(os.getenv("MAPPING_DIR") or os.path.dirname(DEVICE_MAPPING_PATH)).resolve()
 TB_BASE_URL = os.getenv("TB_BASE_URL", "").rstrip("/")
 TB_API_KEY = os.getenv("TB_API_KEY")
 TB_USERNAME = os.getenv("TB_USERNAME")
@@ -33,6 +36,18 @@ def load_mapping() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Mapping not found: {DEVICE_MAPPING_PATH}")
     with open(DEVICE_MAPPING_PATH, "r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def resolve_model_path(filename: str) -> Path:
+    if not filename:
+        raise HTTPException(status_code=400, detail="Missing model filename.")
+    safe_name = os.path.basename(filename)
+    path = (MAPPING_DIR / safe_name).resolve()
+    if MAPPING_DIR not in path.parents and path != MAPPING_DIR:
+        raise HTTPException(status_code=400, detail="Invalid model filename.")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Model not found: {safe_name}")
+    return path
 
 
 def get_device(mapping: Dict[str, Any], device_id: str) -> Dict[str, Any]:
@@ -180,6 +195,17 @@ def list_devices() -> Dict[str, Any]:
             }
         )
     return {"devices": devices}
+
+
+@app.get("/devices.ifc.json")
+def get_mapping() -> Dict[str, Any]:
+    return load_mapping()
+
+
+@app.get("/model/{filename}")
+def get_model(filename: str) -> FileResponse:
+    path = resolve_model_path(filename)
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
 
 
 @app.get("/devices/{device_id}/telemetry")

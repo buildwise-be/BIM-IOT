@@ -1,4 +1,7 @@
 {
+  "model": {
+    "file": "model.ifc"
+  },
   "backend": {
     "middlewareUrl": "http://localhost:8000",
     "thingsboard": {
@@ -14,7 +17,7 @@
         "type": "thingsboard",
         "deviceId": "f34a1140-0113-11f1-873e-85f6dc6f3a3d",
         "entityType": "DEVICE",
-        "accessToken": "l28lz5yziuq49stndv33",
+        "accessToken": "REPLACE_WITH_ACCESS_TOKEN",
         "telemetryKey": "temperature"
       }
     },
@@ -25,7 +28,7 @@
         "type": "thingsboard",
         "deviceId": "0129b400-0114-11f1-873e-85f6dc6f3a3d",
         "entityType": "DEVICE",
-        "accessToken": "Tabrgu6IwTnGZEVRyzVY",
+        "accessToken": "REPLACE_WITH_ACCESS_TOKEN",
         "telemetryKey": "humidity"
       }
     }

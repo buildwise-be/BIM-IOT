@@ -8,7 +8,7 @@ import requests
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = ROOT / "frontend" / "src" / "data" / "devices.ifc.json"
+DEFAULT_CONFIG = ROOT / "mapping" / "devices.ifc.json"
 
 
 def load_config(path: Path) -> dict:

@@ -7,12 +7,12 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
 ## General Design
 - Frontend (Vite + TypeScript)
   - Loads an IFC and builds a GUID -> expressID mapping.
-  - Links BIM objects to IoT devices via `frontend/src/data/devices.ifc.json`.
+  - Loads device mapping from the middleware (`/devices.ifc.json`).
   - Displays telemetry with a chart (Chart.js).
 - Middleware (FastAPI)
   - Exposes a simple API for the front: `/devices` and `/devices/{id}/telemetry`.
   - Queries Thingsboard via REST (JWT or ApiKey).
-  - Reads configuration and mappings from `frontend/src/data/devices.ifc.json`.
+  - Serves the IFC model and device mapping stored in a separate volume.
 - Thingsboard
   - Stores devices and telemetry.
   - Receives data from the local simulator.
@@ -21,6 +21,7 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
 ```text
                 +----------------------+
                 |   IFC Model (.ifc)   |
+                |  (volume mounted)    |
                 +----------+-----------+
                            |
                            v
@@ -33,12 +34,14 @@ The front-end loads an IFC model, enables picking and highlighting, and displays
          |           +-----+----------------+
          |           | Middleware (FastAPI) |
          |           | /devices, /telemetry |
+         |           | /devices.ifc.json    |
+         |           | /model/{file}        |
          |           +----------+-----------+
          |                      |
          |                      v
          |           +----------+-----------+
          |           | devices.ifc.json     |
-         |           | mapping + TB creds   |
+         |           | + model selection    |
          |           +----------------------+
          |
          +---- Simulator (local Python) ----+
@@ -55,11 +58,56 @@ Exposed services:
 - Middleware: `http://localhost:8000`
 - Thingsboard: `http://localhost:7000`
 
-### 2. Configure the mapping
-Edit `frontend/src/data/devices.ifc.json`:
-- `backend.middlewareUrl`: Middleware URL.
-- `backend.thingsboard`: `baseUrl` + credentials (apiKey or username/password).
-- Each device must have `deviceId`, `accessToken`, `telemetryKey`, `entityType` (DEVICE/ASSET).
+If the middleware runs on a different host/port, set `VITE_MIDDLEWARE_URL` when building the frontend.
+
+### 2. Configure the mapping and model
+Place the mapping + IFC model in `mapping/` (mounted into the middleware as `/app/mapping`):
+- `mapping/devices.ifc.json`
+- `mapping/<your-model>.ifc`
+
+The middleware serves:
+- `http://localhost:8000/devices.ifc.json`
+- `http://localhost:8000/model/<file>`
+
+#### Structure of `devices.ifc.json`
+Top-level fields:
+- `model.file`: IFC filename to load (must exist in `mapping/`).
+- `backend.middlewareUrl`: Middleware base URL used by the frontend.
+- `backend.thingsboard`: `baseUrl` + credentials (`apiKey` or `username`/`password`).
+- `devices`: Map of device id -> metadata.
+
+Device fields:
+- `type`: Logical type (e.g. temperature, humidity).
+- `ifcGuids`: IFC element GUIDs to highlight.
+- `connector.type`: `thingsboard` or `mock`.
+- `connector.deviceId`: Thingsboard device UUID (required for `thingsboard`).
+- `connector.entityType`: `DEVICE` or `ASSET` (default `DEVICE`).
+- `connector.accessToken`: Access token (used by the simulator).
+- `connector.telemetryKey`: Telemetry key to query.
+
+Example:
+```json
+{
+  "model": { "file": "model.ifc" },
+  "backend": {
+    "middlewareUrl": "http://localhost:8000",
+    "thingsboard": { "baseUrl": "http://thingsboard:8080", "apiKey": "REPLACE" }
+  },
+  "devices": {
+    "DEV_1": {
+      "type": "temperature",
+      "ifcGuids": ["3TazwRY9P9VBCwM4_ANS28"],
+      "connector": {
+        "type": "thingsboard",
+        "deviceId": "f34a1140-0113-11f1-873e-85f6dc6f3a3d",
+        "entityType": "DEVICE",
+        "accessToken": "REPLACE_WITH_ACCESS_TOKEN",
+        "telemetryKey": "temperature"
+      }
+    }
+  }
+}
+```
 
 ### 3. Start the Thingsboard simulator (local)
 ```bash

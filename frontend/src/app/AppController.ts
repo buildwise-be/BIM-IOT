@@ -4,7 +4,6 @@ import { IfcPickController } from "../viewer/IfcPickController";
 import { HighlightController } from "../viewer/HighlightController";
 import { DeviceMenu } from "../ui/DeviceMenu";
 import { IfcIoTLinker } from "../domain/IfcIoTLinker";
-import devicesData from "../data/devices.ifc.json";
 import * as OBC from "@thatopen/components";
 import Chart from 'chart.js/auto';
 import * as THREE from "three";
@@ -18,15 +17,35 @@ export class AppController {
   private modelID: number;
   private deviceMenu: DeviceMenu;
   private selectionToken = 0;
-  private apiBaseUrl = "http://localhost:8000";
+  private apiBaseUrl = "";
 
   private isSelectionActive(token: number): boolean {
     return token === this.selectionToken;
   }
 
+  private getBootstrapUrl(): string {
+    const envUrl = (import.meta as any).env?.VITE_MIDDLEWARE_URL as string | undefined;
+    return (envUrl || "http://localhost:8000").replace(/\/$/, "");
+  }
+
+  private async fetchMapping(baseUrl: string): Promise<any> {
+    const url = `${baseUrl}/devices.ifc.json`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load mapping from ${url}: ${response.status}`);
+    }
+    return response.json();
+  }
+
   async init() {
     const container = document.getElementById("viewer");
     if (!container) throw new Error("Viewer container not found");
+
+    const bootstrapUrl = this.getBootstrapUrl();
+    const devicesData = await this.fetchMapping(bootstrapUrl);
+    this.apiBaseUrl = ((devicesData as any).backend?.middlewareUrl || bootstrapUrl).replace(/\/$/, "");
+    const modelFile = (devicesData as any).model?.file || "model.ifc";
+    const modelUrl = `${this.apiBaseUrl}/model/${encodeURIComponent(modelFile)}`;
 
     const viewer = ViewerFactory.create(container);
     this.components = viewer.components;
@@ -49,7 +68,7 @@ export class AppController {
     (this.world as any).IFC = { loader: ifcLoader };
 
     this.loader = new FragmentLoader(viewer);
-    await this.loader.load("/model.ifc");
+    await this.loader.load(modelUrl);
 
     // 🔥 Passer le loader ET le canvas
     const pickController = new IfcPickController(
@@ -83,9 +102,6 @@ export class AppController {
 
     // Load devices data
     this.ifcIoTLinker = new IfcIoTLinker(devicesData, guidMap);
-    if ((devicesData as any).backend?.middlewareUrl) {
-      this.apiBaseUrl = (devicesData as any).backend.middlewareUrl;
-    }
 
     this.initDeviceMenu();
     

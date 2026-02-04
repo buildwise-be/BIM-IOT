@@ -1,5 +1,6 @@
 services:
   frontend:
+    restart: always
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -9,6 +10,7 @@ services:
       - middleware
 
   middleware:
+    restart: always
     build:
       context: .
       dockerfile: middleware/Dockerfile
@@ -16,11 +18,11 @@ services:
       - "8000:8000"
     environment:
       TB_BASE_URL: "http://thingsboard:8080"
-      # TB_API_KEY: "REPLACE_WITH_API_KEY"
-      # TB_USERNAME: "tenant@thingsboard.org"
-      # TB_PASSWORD: "tenant"
       CORS_ORIGINS: "http://localhost:8081"
       DEVICE_MAPPING_PATH: "/app/mapping/devices.ifc.json"
+      MAPPING_DIR: "/app/mapping"
+    volumes:
+      - ./mapping:/app/mapping
     depends_on:
       - thingsboard
 
@@ -60,5 +62,4 @@ volumes:
   postgres-data:
     name: tb-postgres-data
     driver: local
-
 
