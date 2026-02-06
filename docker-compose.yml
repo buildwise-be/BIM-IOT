@@ -47,6 +47,7 @@ services:
       DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
       MIDDLEWARE_URL: "http://middleware:8000"
       PREDICTOR_CACHE_DIR: "/app/cache"
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
     volumes:
       - ./data:/app/data
       - predictor-cache:/app/cache

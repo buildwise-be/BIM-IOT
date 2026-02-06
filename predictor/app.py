@@ -11,6 +11,7 @@ import httpx
 MAPPING_PATH = os.getenv("DEVICE_MAPPING_PATH", "/app/data/devices.ifc.json")
 MIDDLEWARE_URL = os.getenv("MIDDLEWARE_URL", "http://middleware:8000").rstrip("/")
 CACHE_DIR = Path(os.getenv("PREDICTOR_CACHE_DIR", "/app/cache"))
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 
 def read_mapping() -> Dict[str, Any]:
@@ -61,8 +62,11 @@ def fetch_script(script: Dict[str, Any], allowlist: List[str], refresh: bool) ->
     if not url:
         return None
 
+    headers = {}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
     with httpx.Client(timeout=10) as client:
-        response = client.get(url)
+        response = client.get(url, headers=headers)
     if response.status_code != 200:
         return None
 

@@ -18,7 +18,7 @@
     },
     "github": {
       "refreshSec": 600,
-      "allowlist": ["https://github.com/ORG/bim-iot-prediction-scripts"]
+      "allowlist": ["https://github.com/buildwise-be/monhuma-predictor"]
     },
     "publish": {
       "telemetry": true,
@@ -31,16 +31,16 @@
     "scripts": [
       {
         "name": "humidity_drying",
-        "repo": "https://github.com/ORG/bim-iot-prediction-scripts",
-        "ref": "v1.0.0",
+        "repo": "https://github.com/buildwise-be/monhuma-predictor",
+        "ref": "main",
         "path": "scripts/per_device/humidity_drying.py",
         "sha256": "<sha256>",
         "scope": "per-device"
       },
       {
         "name": "energy_baseline",
-        "repo": "https://github.com/ORG/bim-iot-prediction-scripts",
-        "ref": "v1.0.0",
+        "repo": "https://github.com/buildwise-be/monhuma-predictor",
+        "ref": "main",
         "path": "scripts/global/energy_baseline.py",
         "sha256": "<sha256>",
         "scope": "global"
