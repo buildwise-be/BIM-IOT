@@ -38,6 +38,21 @@ services:
     depends_on:
       - thingsboard
 
+  predictor:
+    restart: always
+    build:
+      context: .
+      dockerfile: predictor/Dockerfile
+    environment:
+      DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
+      MIDDLEWARE_URL: "http://middleware:8000"
+      PREDICTOR_CACHE_DIR: "/app/cache"
+    volumes:
+      - ./data:/app/data
+      - predictor-cache:/app/cache
+    depends_on:
+      - middleware
+
 
   postgres:
     restart: always
@@ -73,4 +88,7 @@ services:
 volumes:
   postgres-data:
     name: tb-postgres-data
+    driver: local
+  predictor-cache:
+    name: predictor-cache
     driver: local

@@ -233,6 +233,101 @@ class ThingsBoardClient:
             series[key] = points
         return series
 
+    async def fetch_alarm_page(
+        self,
+        mapping: Dict[str, Any],
+        entity_type: str,
+        entity_id: str,
+        search_status: Optional[str],
+        page_size: int = 1,
+        page: int = 0,
+    ) -> Dict[str, Any]:
+        settings = get_tb_settings(mapping)
+        base_url = TB_BASE_URL or settings.get("baseUrl")
+        if not base_url:
+            raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
+
+        url = f"{base_url}/api/alarm/{entity_type}/{entity_id}"
+        params: Dict[str, Any] = {
+            "pageSize": page_size,
+            "page": page,
+            "sortProperty": "createdTime",
+            "sortOrder": "DESC",
+        }
+        if search_status:
+            params["searchStatus"] = str(search_status).upper()
+
+        headers = await self._get_auth_header(mapping)
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, params=params, headers=headers)
+            if response.status_code == 401 and not (TB_API_KEY or settings.get("apiKey")):
+                self._token = None
+                headers = await self._get_auth_header(mapping)
+                response = await client.get(url, params=params, headers=headers)
+
+        if response.status_code != 200:
+            detail = "ThingsBoard alarm fetch failed."
+            try:
+                payload = response.json()
+                message = payload.get("message") or payload.get("error") or payload.get("detail")
+                if message:
+                    detail = f"ThingsBoard error: {message}"
+            except Exception:
+                text = response.text.strip()
+                if text:
+                    detail = f"ThingsBoard error: {text}"
+            raise HTTPException(status_code=502, detail=detail)
+
+        return response.json()
+
+    async def action_alarm(
+        self,
+        mapping: Dict[str, Any],
+        alarm_id: str,
+        action: str,
+    ) -> Dict[str, Any]:
+        settings = get_tb_settings(mapping)
+        base_url = TB_BASE_URL or settings.get("baseUrl")
+        if not base_url:
+            raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
+
+        action = action.lower().strip()
+        if action not in {"ack", "clear"}:
+            raise HTTPException(status_code=400, detail="Invalid alarm action.")
+
+        url = f"{base_url}/api/alarm/{alarm_id}/{action}"
+        headers = await self._get_auth_header(mapping)
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(url, headers=headers)
+            if response.status_code == 401 and not (TB_API_KEY or settings.get("apiKey")):
+                self._token = None
+                headers = await self._get_auth_header(mapping)
+                response = await client.post(url, headers=headers)
+
+            if response.status_code in {404, 405} and action == "clear":
+                alt_url = f"{base_url}/api/alarm/{alarm_id}/clear"
+                response = await client.post(alt_url, headers=headers)
+
+        if response.status_code not in {200, 202, 204}:
+            detail = "ThingsBoard alarm action failed."
+            try:
+                payload = response.json()
+                message = payload.get("message") or payload.get("error") or payload.get("detail")
+                if message:
+                    detail = f"ThingsBoard error: {message}"
+            except Exception:
+                text = response.text.strip()
+                if text:
+                    detail = f"ThingsBoard error: {text}"
+            if "already cleared" in detail.lower():
+                return {"status": "ok"}
+            detail = f"{detail} (status={response.status_code})"
+            raise HTTPException(status_code=502, detail=detail)
+
+        if response.status_code == 204:
+            return {"status": "ok"}
+        return response.json()
+
 
 tb_client = ThingsBoardClient()
 
@@ -306,6 +401,44 @@ async def build_telemetry(
     raise HTTPException(status_code=400, detail=f"Unsupported connector type: {connector_type}")
 
 
+async def publish_telemetry(
+    mapping: Dict[str, Any],
+    device_id: str,
+    entity_type: str,
+    telemetry: Dict[str, Any],
+) -> None:
+    settings = get_tb_settings(mapping)
+    base_url = TB_BASE_URL or settings.get("baseUrl")
+    if not base_url:
+        raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
+    url = f"{base_url}/api/plugins/telemetry/{entity_type}/{device_id}/timeseries"
+    headers = await tb_client._get_auth_header(mapping)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(url, json=telemetry, headers=headers)
+    if response.status_code not in {200, 202, 204}:
+        raise HTTPException(status_code=502, detail="ThingsBoard telemetry publish failed.")
+
+
+async def publish_attributes(
+    mapping: Dict[str, Any],
+    device_id: str,
+    entity_type: str,
+    attributes: Dict[str, Any],
+    scope: str = "SERVER_SCOPE",
+) -> None:
+    settings = get_tb_settings(mapping)
+    base_url = TB_BASE_URL or settings.get("baseUrl")
+    if not base_url:
+        raise HTTPException(status_code=500, detail="Missing TB_BASE_URL.")
+    scope = (scope or "SERVER_SCOPE").upper()
+    url = f"{base_url}/api/plugins/telemetry/{entity_type}/{device_id}/attributes/{scope}"
+    headers = await tb_client._get_auth_header(mapping)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(url, json=attributes, headers=headers)
+    if response.status_code not in {200, 202, 204}:
+        raise HTTPException(status_code=502, detail="ThingsBoard attributes publish failed.")
+
+
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok"}
@@ -337,6 +470,150 @@ async def thingsboard_health() -> Dict[str, Any]:
         }
     except Exception as exc:
         return {"status": "error", "connected": False, "detail": str(exc)}
+
+
+@app.get("/alarms/summary")
+async def alarms_summary(
+    status: Optional[str] = Query(default="ACTIVE"),
+    page_size: int = Query(default=1, ge=1, le=100),
+) -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    devices = mapping.get("devices", {}) if isinstance(mapping, dict) else {}
+    total = 0
+    failed = 0
+    originators = 0
+
+    for _, data in devices.items():
+        connector = data.get("connector", {}) if isinstance(data, dict) else {}
+        if connector.get("type") != "thingsboard":
+            continue
+        device_tb_id = connector.get("deviceId")
+        if not device_tb_id:
+            continue
+        entity_type = (connector.get("entityType") or "DEVICE").upper()
+        if entity_type not in {"DEVICE", "ASSET"}:
+            continue
+        originators += 1
+        try:
+            page = await tb_client.fetch_alarm_page(
+                mapping=mapping,
+                entity_type=entity_type,
+                entity_id=device_tb_id,
+                search_status=status,
+                page_size=page_size,
+                page=0,
+            )
+            total += int(page.get("totalElements") or 0)
+        except Exception:
+            failed += 1
+
+    return {
+        "status": "ok",
+        "total": total,
+        "originators": originators,
+        "failed": failed,
+    }
+
+
+@app.get("/alarms/recent")
+async def alarms_recent(
+    status: Optional[str] = Query(default="ACTIVE"),
+    limit: int = Query(default=8, ge=1, le=50),
+    per_device: int = Query(default=5, ge=1, le=50),
+) -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    devices = mapping.get("devices", {}) if isinstance(mapping, dict) else {}
+    alarms: List[Dict[str, Any]] = []
+    total = 0
+    failed = 0
+    originators = 0
+
+    for device_id, data in devices.items():
+        connector = data.get("connector", {}) if isinstance(data, dict) else {}
+        if connector.get("type") != "thingsboard":
+            continue
+        device_tb_id = connector.get("deviceId")
+        if not device_tb_id:
+            continue
+        entity_type = (connector.get("entityType") or "DEVICE").upper()
+        if entity_type not in {"DEVICE", "ASSET"}:
+            continue
+        originators += 1
+        try:
+            page = await tb_client.fetch_alarm_page(
+                mapping=mapping,
+                entity_type=entity_type,
+                entity_id=device_tb_id,
+                search_status=status,
+                page_size=per_device,
+                page=0,
+            )
+            total += int(page.get("totalElements") or 0)
+            for alarm in page.get("data", []) or []:
+                alarm_id = alarm.get("id")
+                if isinstance(alarm_id, dict):
+                    alarm_id = alarm_id.get("id")
+                alarms.append(
+                    {
+                        "id": alarm_id,
+                        "type": alarm.get("type"),
+                        "severity": alarm.get("severity"),
+                        "status": alarm.get("status"),
+                        "createdTime": alarm.get("createdTime"),
+                        "acknowledged": alarm.get("acknowledged"),
+                        "cleared": alarm.get("cleared"),
+                        "originator": {
+                            "deviceId": device_id,
+                            "tbId": device_tb_id,
+                            "entityType": entity_type,
+                        },
+                    }
+                )
+        except Exception:
+            failed += 1
+
+    alarms.sort(key=lambda item: item.get("createdTime") or 0, reverse=True)
+    alarms = alarms[:limit]
+
+    return {
+        "status": "ok",
+        "alarms": alarms,
+        "total": total,
+        "originators": originators,
+        "failed": failed,
+        "timestamp": int(time.time() * 1000),
+    }
+
+
+@app.post("/alarms/{alarm_id}/{action}")
+async def alarm_action(alarm_id: str, action: str) -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    result = await tb_client.action_alarm(mapping, alarm_id, action)
+    return {"status": "ok", "result": result}
+
+
+@app.post("/predictions/apply")
+async def predictions_apply(payload: Dict[str, Any]) -> Dict[str, Any]:
+    mapping = load_mapping_cached()
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="Invalid items payload.")
+    published = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        device_id = item.get("deviceId")
+        entity_type = (item.get("entityType") or "DEVICE").upper()
+        telemetry = item.get("telemetry") or {}
+        attributes = item.get("attributes") or {}
+        if not device_id or entity_type not in {"DEVICE", "ASSET"}:
+            continue
+        if telemetry:
+            await publish_telemetry(mapping, device_id, entity_type, telemetry)
+        if attributes:
+            await publish_attributes(mapping, device_id, entity_type, attributes)
+        published += 1
+    return {"status": "ok", "published": published}
 
 
 @app.get("/devices")

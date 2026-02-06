@@ -9,6 +9,44 @@
       "apiKey": "tb_vROrU2YxaVI6YkbE28RA6ENnATjfcTItVTkjSONHPiGoTIxJkrjHQgySrDVr5MwrOXXu6Fd1sl9TTSLzb6B7NA"
     }
   },
+  "predictor": {
+    "enabled": true,
+    "schedule": {
+      "mode": "interval",
+      "intervalSec": 60,
+      "maxRunSec": 60
+    },
+    "github": {
+      "refreshSec": 600,
+      "allowlist": ["https://github.com/ORG/bim-iot-prediction-scripts"]
+    },
+    "publish": {
+      "telemetry": true,
+      "attributes": true
+    },
+    "globalDevice": {
+      "deviceId": "PREDICTOR_GLOBAL",
+      "entityType": "DEVICE"
+    },
+    "scripts": [
+      {
+        "name": "humidity_drying",
+        "repo": "https://github.com/ORG/bim-iot-prediction-scripts",
+        "ref": "v1.0.0",
+        "path": "scripts/per_device/humidity_drying.py",
+        "sha256": "<sha256>",
+        "scope": "per-device"
+      },
+      {
+        "name": "energy_baseline",
+        "repo": "https://github.com/ORG/bim-iot-prediction-scripts",
+        "ref": "v1.0.0",
+        "path": "scripts/global/energy_baseline.py",
+        "sha256": "<sha256>",
+        "scope": "global"
+      }
+    ]
+  },
   "devices": {
     "DEV_1": {
       "type": "temperature",
