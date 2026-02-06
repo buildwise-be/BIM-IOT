@@ -42,7 +42,7 @@ services:
     restart: always
     build:
       context: .
-      dockerfile: predictor/Dockerfile
+      dockerfile: script_hander/Dockerfile
     environment:
       DEVICE_MAPPING_PATH: "/app/data/devices.ifc.json"
       MIDDLEWARE_URL: "http://middleware:8000"

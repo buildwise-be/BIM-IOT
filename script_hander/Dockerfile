@@ -10,10 +10,10 @@ RUN adduser --disabled-password --gecos "" appuser \
     && mkdir -p /app/cache \
     && chown -R appuser:appuser /app
 
-COPY predictor/requirements.txt /app/requirements.txt
+COPY script_hander/requirements.txt /app/requirements.txt
 RUN pip install -r /app/requirements.txt
 
-COPY predictor/app.py /app/app.py
+COPY script_hander/app.py /app/app.py
 
 USER appuser
 
