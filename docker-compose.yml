@@ -9,6 +9,7 @@ services:
     environment:
       MIDDLEWARE_URL: "http://middleware:8000"
       DASH_VIEWER_URL: "http://localhost:8081"
+      SCRIPT_HANDLER_URL: "http://predictor:8100"
     depends_on:
       - middleware
 
@@ -48,6 +49,7 @@ services:
       MIDDLEWARE_URL: "http://middleware:8000"
       PREDICTOR_CACHE_DIR: "/app/cache"
       GITHUB_TOKEN: "${GITHUB_TOKEN}"
+      SCRIPT_HANDLER_MODE: "loop"
     volumes:
       - ./data:/app/data
       - predictor-cache:/app/cache

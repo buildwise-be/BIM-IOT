@@ -11,6 +11,7 @@ from dash import callback_context, ALL
 
 MIDDLEWARE_URL = os.getenv("MIDDLEWARE_URL", "http://localhost:8000").rstrip("/")
 DASH_VIEWER_URL = os.getenv("DASH_VIEWER_URL", "http://localhost:8081").rstrip("/")
+SCRIPT_HANDLER_URL = os.getenv("SCRIPT_HANDLER_URL", "http://predictor:8100").rstrip("/")
 FONT_URL = "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
 
 
@@ -87,6 +88,72 @@ def fetch_thingsboard_health() -> Dict[str, Any]:
         response = client.get(url)
     if response.status_code != 200:
         return {"status": "error", "connected": False, "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def fetch_script_handler_health() -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/health"
+    with httpx.Client(timeout=5) as client:
+        response = client.get(url)
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def fetch_script_handler_status() -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/status"
+    with httpx.Client(timeout=5) as client:
+        response = client.get(url)
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def post_script_handler_run() -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/run"
+    with httpx.Client(timeout=10) as client:
+        response = client.post(url, json={})
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def post_script_handler_run_async() -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/run_async"
+    with httpx.Client(timeout=10) as client:
+        response = client.post(url, json={})
+    if response.status_code not in {200, 202}:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def post_script_handler_reload() -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/reload"
+    with httpx.Client(timeout=10) as client:
+        response = client.post(url)
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def fetch_script_handler_job(job_id: str) -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/jobs/{job_id}"
+    with httpx.Client(timeout=5) as client:
+        response = client.get(url)
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
+    return response.json()
+
+
+def post_script_handler_kill(job_id: str | None = None) -> Dict[str, Any]:
+    url = f"{SCRIPT_HANDLER_URL}/kill"
+    payload: Dict[str, Any] = {}
+    if job_id:
+        payload["jobId"] = job_id
+    with httpx.Client(timeout=5) as client:
+        response = client.post(url, json=payload)
+    if response.status_code != 200:
+        return {"status": "error", "detail": f"{response.status_code}"}
     return response.json()
 
 
@@ -555,10 +622,10 @@ dash_app.layout = html.Div(
                                             children=[
                                                 dbc.Row(
                                                     className="g-3",
-                                                    children=[
-                                                        dbc.Col(
-                                                            md=6,
-                                                            children=[
+                                                      children=[
+                                                          dbc.Col(
+                                                              md=6,
+                                                              children=[
                                                                 dbc.Card(
                                                                     className="glass-card h-100",
                                                                     children=[
@@ -623,38 +690,65 @@ dash_app.layout = html.Div(
                                                                 )
                                                             ],
                                                         ),
-                                                        dbc.Col(
-                                                            md=6,
-                                                            children=[
-                                                                dbc.Card(
-                                                                    className="glass-card h-100",
-                                                                    children=[
-                                                                        dbc.CardBody(
-                                                                            children=[
-                                                                                html.Div("Sync status", className="kpi-label"),
-                                                                                html.Div(
-                                                                                    "N/A",
-                                                                                    id="kpi-sync-value",
-                                                                                    className="kpi-value kpi-sync",
-                                                                                ),
-                                                                                html.Div(
-                                                                                    "Thingsboard",
-                                                                                    id="kpi-sync-sub",
-                                                                                    className="kpi-sub",
-                                                                                ),
-                                                                            ]
-                                                                        )
-                                                                    ],
-                                                                )
-                                                            ],
-                                                        ),
-                                                    ],
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                )
-                            ],
+                                                          dbc.Col(
+                                                              md=6,
+                                                              children=[
+                                                                  dbc.Card(
+                                                                      className="glass-card h-100",
+                                                                      children=[
+                                                                          dbc.CardBody(
+                                                                              children=[
+                                                                                  html.Div("Sync status", className="kpi-label"),
+                                                                                  html.Div(
+                                                                                      "N/A",
+                                                                                      id="kpi-sync-value",
+                                                                                      className="kpi-value kpi-sync",
+                                                                                  ),
+                                                                                  html.Div(
+                                                                                      "Thingsboard",
+                                                                                      id="kpi-sync-sub",
+                                                                                      className="kpi-sub",
+                                                                                  ),
+                                                                              ]
+                                                                          )
+                                                                      ],
+                                                                  )
+                                                              ],
+                                                          ),
+                                                          dbc.Col(
+                                                              md=6,
+                                                              children=[
+                                                                  dbc.Card(
+                                                                      className="glass-card h-100",
+                                                                      children=[
+                                                                          dbc.CardBody(
+                                                                              children=[
+                                                                                  html.Div("Script Pulse", className="kpi-label"),
+                                                                                  html.Div(
+                                                                                      "N/A",
+                                                                                      id="kpi-script-value",
+                                                                                      className="kpi-value kpi-sync",
+                                                                                  ),
+                                                                                  html.Div(
+                                                                                      "Script handler",
+                                                                                      id="kpi-script-sub",
+                                                                                      className="kpi-sub",
+                                                                                  ),
+                                                                              ]
+                                                                          )
+                                                                      ],
+                                                                  )
+                                                              ],
+                                                          ),
+                                                      ],
+                                                  ),
+                                                  dbc.Card(
+                                                      className="glass-card mt-3",
+                                              ],
+                                          ),
+                                      ],
+                                  )
+                              ],
                         ),
                         dbc.Col(
                             md=4,
@@ -765,7 +859,7 @@ dash_app.layout = html.Div(
                     children=[
                         dbc.Col(
                             id="telemetry-col",
-                            md=5,
+                            md=4,
                             children=[
                                 dbc.Card(
                                     id="telemetry-panel",
@@ -1037,8 +1131,96 @@ dash_app.layout = html.Div(
                             ],
                         ),
                         dbc.Col(
+                            id="pulse-col",
+                            md=3,
+                            children=[
+                                dbc.Card(
+                                    id="pulse-panel",
+                                    className="glass-card h-100",
+                                    children=[
+                                        dbc.CardHeader(
+                                            className="d-flex justify-content-between align-items-center",
+                                            children=[
+                                                html.Div("Pulse", className="fw-semibold"),
+                                                html.Div("Script handler", className="text-muted small"),
+                                            ],
+                                        ),
+                                        dbc.CardBody(
+                                            className="soft-panel",
+                                            children=[
+                                                html.Div("Diagnostics", className="kpi-label"),
+                                                html.Div(
+                                                    id="script-pulse-details",
+                                                    className="small text-muted",
+                                                ),
+                                                html.Hr(className="my-2"),
+                                                dbc.Row(
+                                                    className="g-2 align-items-center",
+                                                    children=[
+                                                        dbc.Col(
+                                                            width="auto",
+                                                            children=[
+                                                                dbc.Button(
+                                                                    "Run now",
+                                                                    id="script-run-btn",
+                                                                    color="primary",
+                                                                )
+                                                            ],
+                                                        ),
+                                                        dbc.Col(
+                                                            width="auto",
+                                                            children=[
+                                                                dbc.Button(
+                                                                    "Run async",
+                                                                    id="script-run-async-btn",
+                                                                    color="secondary",
+                                                                )
+                                                            ],
+                                                        ),
+                                                        dbc.Col(
+                                                            width="auto",
+                                                            children=[
+                                                                dbc.Button(
+                                                                    "Kill",
+                                                                    id="script-kill-btn",
+                                                                    color="danger",
+                                                                )
+                                                            ],
+                                                        ),
+                                                    ],
+                                                ),
+                                                dbc.Row(
+                                                    className="g-2 align-items-center mt-2",
+                                                    children=[
+                                                        dbc.Col(
+                                                            width="auto",
+                                                            children=[
+                                                                dbc.Button(
+                                                                    "Reload mapping",
+                                                                    id="script-reload-btn",
+                                                                    color="light",
+                                                                )
+                                                            ],
+                                                        )
+                                                    ],
+                                                ),
+                                                html.Div(
+                                                    id="script-control-status",
+                                                    className="telemetry-status small mt-2",
+                                                ),
+                                                html.Div(
+                                                    id="script-job-status",
+                                                    className="text-muted small mt-2",
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                )
+                            ],
+                        ),
+                        dbc.Col(
                             id="viewer-col",
-                            md=7,
+                            md=5,
                             children=[
                                 dbc.Card(
                                     id="viewer-panel",
@@ -1090,6 +1272,7 @@ dash_app.layout = html.Div(
         dcc.Store(id="devices-panel-state", data=True),
         dcc.Store(id="alarms-panel-state", data=True),
         dcc.Store(id="awareness-panel-state", data=True),
+        dcc.Store(id="script-job-id", data=""),
         dcc.Store(id="telemetry-panel-state", data=True),
         dcc.Store(id="viewer-panel-state", data=True),
         dcc.Store(id="telemetry-advanced-state", data=False),
@@ -1146,6 +1329,9 @@ def on_refresh_mapping(n_clicks, init_ticks):
     Output("kpi-sync-value", "children"),
     Output("kpi-sync-value", "className"),
     Output("kpi-sync-sub", "children"),
+    Output("kpi-script-value", "children"),
+    Output("kpi-script-value", "className"),
+    Output("kpi-script-sub", "children"),
     Output("kpi-alarms-value", "children"),
     Output("kpi-alarms-sub", "children"),
     Input("mapping-store", "data"),
@@ -1158,6 +1344,9 @@ def update_kpis(mapping, auto_state, n_intervals):
     sync_value = "N/A"
     sync_sub = "Thingsboard"
     sync_class = "kpi-value kpi-sync"
+    script_value = "N/A"
+    script_sub = "Script handler"
+    script_class = "kpi-value kpi-sync"
     alarms_value = "0"
     alarms_sub = "Mapped devices"
 
@@ -1176,6 +1365,35 @@ def update_kpis(mapping, auto_state, n_intervals):
             sync_value = "OFFLINE"
             sync_sub = "Unavailable"
             sync_class = "kpi-value kpi-sync kpi-sync-offline"
+
+        try:
+            health = fetch_script_handler_health()
+            status = str(health.get("status") or "unknown").lower()
+            enabled = bool(health.get("enabled", True))
+            last_success = health.get("last_success_ts")
+            last_error = health.get("last_error")
+            if not enabled or status == "disabled":
+                script_value = "PAUSED"
+                script_sub = "Disabled in config"
+                script_class = "kpi-value kpi-sync kpi-sync-offline"
+            elif status in {"ok", "running"}:
+                script_value = "LIVE"
+                script_class = "kpi-value kpi-sync kpi-sync-online"
+                if last_success:
+                    script_sub = f"Last run {datetime.fromtimestamp(last_success / 1000).strftime('%H:%M')}"
+                else:
+                    script_sub = "Running"
+            elif status == "error":
+                script_value = "ERROR"
+                script_class = "kpi-value kpi-sync kpi-sync-offline"
+                script_sub = last_error or "Check logs"
+            else:
+                script_value = status.upper()
+                script_sub = "Unknown state"
+        except Exception:
+            script_value = "OFFLINE"
+            script_sub = "Unreachable"
+            script_class = "kpi-value kpi-sync kpi-sync-offline"
 
         try:
             summary = fetch_alarms_summary("ACTIVE")
@@ -1198,9 +1416,141 @@ def update_kpis(mapping, auto_state, n_intervals):
         sync_value,
         sync_class,
         sync_sub,
+        script_value,
+        script_class,
+        script_sub,
         alarms_value,
         alarms_sub,
     )
+
+
+@dash_app.callback(
+    Output("script-pulse-details", "children"),
+    Input("mapping-store", "data"),
+    Input("tb-health-interval", "n_intervals"),
+)
+def update_script_pulse_details(mapping, n_intervals):
+    if not mapping:
+        return html.Div("Waiting for mapping...")
+    try:
+        status = fetch_script_handler_status()
+    except Exception:
+        return html.Div("Script handler unreachable.")
+
+    def fmt_ts(value):
+        if not value:
+            return "n/a"
+        try:
+            return datetime.fromtimestamp(value / 1000).strftime("%H:%M:%S")
+        except Exception:
+            return "n/a"
+
+    lines = [
+        f"Mode: {status.get('mode', 'n/a')}",
+        f"Enabled: {status.get('enabled', 'n/a')}",
+        f"State: {status.get('status', 'n/a')}",
+        f"Running job: {status.get('running_job_id', 'n/a')}",
+        f"Last cycle: {fmt_ts(status.get('last_cycle_ts'))}",
+        f"Last success: {fmt_ts(status.get('last_success_ts'))}",
+        f"Last items: {status.get('last_items', 'n/a')}",
+        f"Last duration: {status.get('last_duration_ms', 'n/a')} ms",
+    ]
+    last_error = status.get("last_error")
+    if last_error:
+        lines.append(f"Last error: {last_error}")
+
+    return [html.Div(line) for line in lines]
+
+
+@dash_app.callback(
+    Output("script-control-status", "children"),
+    Output("script-control-status", "className"),
+    Output("script-job-id", "data"),
+    Input("script-run-btn", "n_clicks"),
+    Input("script-run-async-btn", "n_clicks"),
+    Input("script-kill-btn", "n_clicks"),
+    Input("script-reload-btn", "n_clicks"),
+    State("script-job-id", "data"),
+    prevent_initial_call=True,
+)
+def on_script_handler_control(run_clicks, run_async_clicks, kill_clicks, reload_clicks, job_id):
+    if not callback_context.triggered:
+        return no_update, no_update, no_update
+    trigger = callback_context.triggered[0]
+    trigger_id = callback_context.triggered_id
+    if not trigger or not trigger.get("value"):
+        return no_update, no_update, no_update
+
+    base_status_class = "telemetry-status small mt-2"
+    error_status_class = "telemetry-status small mt-2 error"
+
+    if trigger_id == "script-run-btn":
+        try:
+            result = post_script_handler_run()
+            if result.get("status") == "error":
+                return f"Run failed: {result.get('detail')}", error_status_class, ""
+            items = result.get("items", 0)
+            duration = result.get("duration_ms", "n/a")
+            return f"Run ok · {items} items · {duration} ms", base_status_class, ""
+        except Exception as exc:
+            return f"Run failed: {exc}", error_status_class, ""
+
+    if trigger_id == "script-run-async-btn":
+        try:
+            result = post_script_handler_run_async()
+            if result.get("status") == "error":
+                return f"Async failed: {result.get('detail')}", error_status_class, ""
+            job_id = result.get("jobId") or ""
+            return f"Async queued · job {job_id}", base_status_class, job_id
+        except Exception as exc:
+            return f"Async failed: {exc}", error_status_class, ""
+
+    if trigger_id == "script-kill-btn":
+        try:
+            result = post_script_handler_kill(job_id if job_id else None)
+            if result.get("status") == "error":
+                return f"Kill failed: {result.get('detail')}", error_status_class, job_id
+            return "Kill requested", base_status_class, job_id
+        except Exception as exc:
+            return f"Kill failed: {exc}", error_status_class, job_id
+
+    if trigger_id == "script-reload-btn":
+        try:
+            result = post_script_handler_reload()
+            if result.get("status") == "error":
+                return f"Reload failed: {result.get('detail')}", error_status_class, ""
+            return "Mapping reloaded", base_status_class, ""
+        except Exception as exc:
+            return f"Reload failed: {exc}", error_status_class, ""
+
+    return no_update, no_update, no_update
+
+
+@dash_app.callback(
+    Output("script-job-status", "children"),
+    Input("script-job-id", "data"),
+    Input("tb-health-interval", "n_intervals"),
+)
+def update_script_job_status(job_id, n_intervals):
+    if not job_id:
+        return ""
+    try:
+        job = fetch_script_handler_job(job_id)
+    except Exception:
+        return "Job status unavailable."
+
+    status = str(job.get("status") or "unknown")
+    result = job.get("result") or {}
+    if status == "done":
+        items = result.get("items", "n/a")
+        duration = result.get("duration_ms", "n/a")
+        return f"Job {job_id} · done · {items} items · {duration} ms"
+    if status == "error":
+        detail = ""
+        if isinstance(result, dict):
+            detail = result.get("detail") or ""
+        return f"Job {job_id} · error {detail}".strip()
+    return f"Job {job_id} · {status}"
 
 
 @dash_app.callback(
